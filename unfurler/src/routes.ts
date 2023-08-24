@@ -1,3 +1,6 @@
+import fetch from 'node-fetch-commonjs';
+import config from './config';
+
 interface Match {
   render: boolean;
   title: string;
@@ -5,6 +8,13 @@ interface Match {
   fallbackFile: string;
   staticImg?: string;
   networkMode: string;
+  params?: string[];
+  sip?: SipTemplate;
+}
+
+interface SipTemplate {
+  template: string;
+  getData: Function;
 }
 
 const routes = {
@@ -13,6 +23,25 @@ const routes = {
     params: 1,
     getTitle(path) {
       return `Block: ${path[0]}`;
+    },
+    sip: {
+      template: 'block',
+      async getData (params: string[]) {
+        if (params?.length) {
+          let blockId = params[0];
+          if (blockId.length !== 64) {
+            blockId = await (await fetch(config.API.ESPLORA + `/block-height/${blockId}`)).text();
+          }
+          const [block, transactions] = await Promise.all([
+            (await fetch(config.API.MEMPOOL + `/block/${blockId}`)).json(),
+            (await fetch(config.API.ESPLORA + `/block/${blockId}/txids`)).json()
+          ])
+          return {
+            block,
+            transactions,
+          };
+        }
+      }
     }
   },
   address: {
@@ -108,7 +137,7 @@ const networks = {
   }
 };
 
-export function matchRoute(network: string, path: string): Match {
+export function matchRoute(network: string, path: string, matchFor: string = 'render'): Match {
   const match: Match = {
     render: false,
     title: '',
@@ -131,7 +160,7 @@ export function matchRoute(network: string, path: string): Match {
   match.fallbackFile = route.fallbackFile;
 
   // traverse the route tree until we run out of route or tree, or hit a renderable match
-  while (!route.render && route.routes && parts.length && route.routes[parts[0]]) {
+  while (!route[matchFor] && route.routes && parts.length && route.routes[parts[0]]) {
     route = route.routes[parts[0]];
     parts.shift();
     if (route.fallbackImg) {
@@ -141,8 +170,10 @@ export function matchRoute(network: string, path: string): Match {
   }
 
   // enough route parts left for title & rendering
-  if (route.render && parts.length >= route.params) {
-    match.render = true;
+  if (route[matchFor] && parts.length >= route.params) {
+    match.render = route.render;
+    match.sip = route.sip;
+    match.params = parts;
   }
   // only use set a static image for exact matches
   if (!parts.length && route.staticImg) {
