@@ -9,6 +9,7 @@ interface FailoverHost {
   host: string,
   rtts: number[],
   rtt: number,
+  timedOut?: boolean,
   failures: number,
   latestHeight?: number,
   socket?: boolean,
@@ -100,9 +101,18 @@ class FailoverRouter {
           host.outOfSync = false;
         }
         host.unreachable = false;
+        host.timedOut = false;
       } else {
         host.outOfSync = true;
         host.unreachable = true;
+        host.latestHeight = 0;
+        host.rtt = Infinity;
+        if (results[i].status === 'rejected' && (results[i] as PromiseRejectedResult).reason.code === 'ECONNABORTED') {
+          // timeout
+          host.timedOut = true;
+        } else {
+          host.timedOut = false;
+        }
       }
     }
 
@@ -127,7 +137,7 @@ class FailoverRouter {
 
   private formatRanking(index: number, host: FailoverHost, active: FailoverHost, maxHeight: number): string {
     const heightStatus = host.outOfSync ? '🚫' : (host.latestHeight && host.latestHeight < maxHeight ? '🟧' : '✅');
-    return `${host === active ? '⭐️' : '  '} ${host.rtt < Infinity ? Math.round(host.rtt).toString().padStart(5, ' ') + 'ms' : '    -  '} ${host.unreachable ? '🔥' : '✅'} | block: ${host.latestHeight || '??????'} ${heightStatus} | ${host.host} ${host === active ? '⭐️' : '  '}`;
+    return `${host === active ? '⭐️' : '  '} ${host.rtt < Infinity ? Math.round(host.rtt).toString().padStart(5, ' ') + 'ms' : (host.timedOut ? '  ⌛️💥 ' : '    -  ')} ${host.unreachable ? '🔥' : '✅'} | block: ${host.latestHeight || '??????'} ${heightStatus} | ${host.host} ${host === active ? '⭐️' : '  '}`;
   }
 
   // sort hosts by connection quality, and update default fallback
