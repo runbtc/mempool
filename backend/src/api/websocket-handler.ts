@@ -24,6 +24,7 @@ import { ApiPrice } from '../repositories/PricesRepository';
 import accelerationApi from './services/acceleration';
 import mempool from './mempool';
 import bitcoinSecondClient from './bitcoin/bitcoin-second-client';
+import { calculateCpfp } from './cpfp';
 
 // valid 'want' subscriptions
 const wantable = [
@@ -614,6 +615,9 @@ class WebsocketHandler {
               accelerated: mempoolTx.acceleration || undefined,
             }
           };
+          if (!mempoolTx.cpfpChecked) {
+            calculateCpfp(mempoolTx, newMempool);
+          }
           if (mempoolTx.cpfpDirty) {
             positionData['cpfp'] = {
               ancestors: mempoolTx.ancestors,
