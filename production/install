@@ -488,9 +488,9 @@ osUserCreate()
         Debian)
             # useradd -d /mempool -g mempool [-G additional_group] mempool
             if [ $# -eq 3 ] ; then
-                osSudo "${ROOT_USER}" useradd -d "$2" -g "$3" "$1"
+                osSudo "${ROOT_USER}" id -u $1 &>/dev/null || useradd -d "$2" -g "$3" "$1"
             elif [ $# -eq 4 ]; then
-                osSudo "${ROOT_USER}" useradd -d "$2" -g "$3" -G "$4" "$1"
+                osSudo "${ROOT_USER}" id -u $1 &>/dev/null || useradd -d "$2" -g "$3" -G "$4" "$1"
             else
                 echo "Illegal number of parameters"
                 exit 1
@@ -503,10 +503,10 @@ osGroupCreate()
 {
     case $OS in
         FreeBSD)
-            osSudo "${ROOT_USER}" pw groupadd $*
+            osSudo "${ROOT_USER}" pw groupadd -f $*
         ;;
         Debian)
-            osSudo "${ROOT_USER}" groupadd $*
+            osSudo "${ROOT_USER}" groupadd -f $*
         ;;
     esac
 }
