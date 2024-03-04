@@ -151,7 +151,7 @@ for repo in $backend_repos;do
 done
 
 # build unfurlers
-for repo in mainnet liquid bisq;do
+for repo in $frontend_repos;do
     build_unfurler "${repo}"
 done
 
@@ -166,7 +166,7 @@ for repo in $frontend_repos;do
 done
 
 # ship frontend dist folders to public_html
-for target in mainnet liquid bisq;do
+for target in $frontend_repos;do
     ship_frontend "${target}"
 done
 
