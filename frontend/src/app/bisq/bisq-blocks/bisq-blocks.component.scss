@@ -1,0 +1,6 @@
+.pagination-container {
+  float: none;
+  @media(min-width: 400px){
+    float: right;
+  }
+}

@@ -1,70 +1,102 @@
-<header>
+<ng-container *ngIf="{ val: network$ | async } as network">
+<header *ngIf="headerVisible" class="sticky-header">
+
   <nav class="navbar navbar-expand-md navbar-dark bg-dark">
-  <a class="navbar-brand" [routerLink]="['/' | relativeUrl]" style="position: relative;">
-    <img src="./resources/mempool-logo.png" height="35" width="140" class="logo" [ngStyle]="{'opacity': connectionState === 2 ? 1 : 0.5 }">
-    <div class="badge badge-warning connection-badge" *ngIf="connectionState === 0">Offline</div>
-    <div class="badge badge-warning connection-badge" style="left: 30px;" *ngIf="connectionState === 1">Reconnecting...</div>
+  <!-- Hamburger -->
+  <ng-container *ngIf="servicesEnabled">
+    <div *ngIf="user" class="profile_image_container" [class]="{'anon': !user.imageMd5}" (click)="hamburgerClick($event)">
+      <img *ngIf="user.imageMd5" [src]="'/api/v1/services/account/images/' + user.username + '?md5=' + user.imageMd5" class="profile_image">
+      <app-svg-images style="color: lightgrey; fill: lightgray" *ngIf="!user.imageMd5" name="anon"></app-svg-images>
+    </div>
+    <div *ngIf="false && user === null" class="profile_image_container" (click)="hamburgerClick($event)">
+      <app-svg-images name="hamburger" height="40"></app-svg-images>
+    </div>
+    <!-- Empty placeholder -->
+    <div *ngIf="user === undefined" class="profile_image_container"></div>
+  </ng-container>
+
+  <a class="navbar-brand" [ngClass]="{'dual-logos': subdomain}" [routerLink]="['/' | relativeUrl]" (click)="brandClick($event)">
+  <ng-template [ngIf]="subdomain && enterpriseInfo">
+    <div class="subdomain_container">
+      <img [src]="'/api/v1/services/enterprise/images/' + subdomain + '/logo?imageMd5=' + enterpriseInfo.imageMd5" class="subdomain_logo">
+    </div>
+  </ng-template>
+    <ng-container *ngIf="{ val: connectionState$ | async } as connectionState">
+      <app-svg-images *ngIf="!officialMempoolSpace" name="mempoolSpace" viewBox="0 0 500 126" class="mempool-logo" [ngStyle]="{'opacity': connectionState.val === 2 ? 1 : 0.5 }"></app-svg-images>
+      <app-svg-images *ngIf="officialMempoolSpace" name="officialMempoolSpace" viewBox="0 0 500 126"></app-svg-images>
+      <div class="connection-badge">
+        <div class="badge badge-warning" *ngIf="connectionState.val === 0" i18n="master-page.offline">Offline</div>
+        <div class="badge badge-warning" *ngIf="connectionState.val === 1" i18n="master-page.reconnecting">Reconnecting...</div>
+      </div>
+    </ng-container>
   </a>
 
-
-  <div ngbDropdown display="dynamic" style="margin-right: 16px;" *ngIf="env.TESTNET_ENABLED || env.LIQUID_ENABLED || env.BISQ_ENABLED">
-    <button ngbDropdownToggle type="button" class="btn btn-secondary dropdown-toggle-split" aria-haspopup="true">
-      <img src="./resources/{{ network === '' ? 'bitcoin' : network }}-logo.png" style="width: 25px; height: 25px;" class="mr-1">
+  <div (window:resize)="onResize()" ngbDropdown class="dropdown-container" *ngIf="env.TESTNET_ENABLED || env.SIGNET_ENABLED || env.LIQUID_ENABLED || env.BISQ_ENABLED || env.LIQUID_TESTNET_ENABLED">
+    <button ngbDropdownToggle type="button" class="btn btn-secondary dropdown-toggle-split d-flex justify-content-center align-items-center" aria-haspopup="true">
+      <app-svg-images class="d-flex justify-content-center align-items-center current-network-svg" [name]="network.val === '' ? 'bitcoin' : network.val" width="20" height="20" viewBox="0 0 65 65"></app-svg-images>
     </button>
-    <div ngbDropdownMenu>
-      <button ngbDropdownItem class="mainnet" routerLink="/"><img src="./resources/bitcoin-logo.png" style="width: 30px;" class="mr-1"> Mainnet</button>
-      <button ngbDropdownItem *ngIf="env.TESTNET_ENABLED" class="testnet" [class.active]="network === 'testnet'" routerLink="/testnet"><img src="./resources/testnet-logo.png" style="width: 30px;" class="mr-1"> Testnet</button>
-      <h6 *ngIf="env.LIQUID_ENABLED || env.BISQ_ENABLED" class="dropdown-header">Layer 2 Networks</h6>
-      <button ngbDropdownItem *ngIf="env.BISQ_ENABLED" class="mainnet" [class.active]="network === 'bisq'" routerLink="/bisq"><img src="./resources/bisq-logo.png" style="width: 30px;" class="mr-1"> Bisq</button>
-      <button ngbDropdownItem *ngIf="env.LIQUID_ENABLED" class="liquid" [class.active]="network === 'liquid'" routerLink="/liquid"><img src="./resources/liquid-logo.png" style="width: 30px;" class="mr-1"> Liquid</button>
+    <div ngbDropdownMenu [ngClass]="{'dropdown-menu-right' : isMobile}">
+      <a ngbDropdownItem class="mainnet" [routerLink]="networkPaths['mainnet'] || '/'"><app-svg-images name="bitcoin" width="22" height="22" viewBox="0 0 65 65" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Mainnet</a>
+      <a ngbDropdownItem *ngIf="env.SIGNET_ENABLED" class="signet" [class.active]="network.val === 'signet'" [routerLink]="networkPaths['signet'] || '/signet'"><app-svg-images name="signet" width="22" height="22" viewBox="0 0 65 65" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Signet</a>
+      <a ngbDropdownItem *ngIf="env.TESTNET_ENABLED" class="testnet" [class.active]="network.val === 'testnet'" [routerLink]="networkPaths['testnet'] || '/testnet'"><app-svg-images name="testnet" width="22" height="22" viewBox="0 0 65 65" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Testnet</a>
+      <h6 *ngIf="env.LIQUID_ENABLED || env.BISQ_ENABLED" class="dropdown-header" i18n="master-page.layer2-networks-header">Layer 2 Networks</h6>
+      <a [href]="env.BISQ_WEBSITE_URL + urlLanguage + (networkPaths['bisq'] || '')" ngbDropdownItem *ngIf="env.BISQ_ENABLED" class="bisq"><app-svg-images name="bisq" width="20" height="20" viewBox="0 0 75 75" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Bisq</a>
+      <a [href]="env.LIQUID_WEBSITE_URL + urlLanguage + (networkPaths['liquid'] || '')" ngbDropdownItem *ngIf="env.LIQUID_ENABLED" class="liquid" [class.active]="network.val === 'liquid'"><app-svg-images name="liquid" width="22" height="22" viewBox="0 0 125 125" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Liquid</a>
+      <a [href]="env.LIQUID_WEBSITE_URL + urlLanguage  + (networkPaths['liquidtestnet'] || '/testnet')" ngbDropdownItem *ngIf="env.LIQUID_TESTNET_ENABLED" class="liquidtestnet" [class.active]="network.val === 'liquid'"><app-svg-images name="liquidtestnet" width="22" height="22" viewBox="0 0 125 125" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Liquid Testnet</a>
     </div>
   </div>
 
-  <button class="navbar-toggler" type="button" (click)="collapse()">
-    <span class="navbar-toggler-icon"></span>
-  </button>
-  
-  <div class="navbar-collapse collapse" id="navbarCollapse" [ngClass]="{'show': navCollapsed}">
-    <ul class="navbar-nav mr-auto {{ network }}">
-      <ng-template [ngIf]="network === 'bisq'" [ngIfElse]="notBisq">
-        <li class="nav-item" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">
-          <a class="nav-link" [routerLink]="['/bisq']" (click)="collapse()">Transactions</a>
-        </li>
-        <li class="nav-item" routerLinkActive="active">
-          <a class="nav-link" [routerLink]="['/bisq/blocks']" (click)="collapse()">Blocks</a>
-        </li>
-        <li class="nav-item" routerLinkActive="active">
-          <a class="nav-link" [routerLink]="['/bisq/stats']" (click)="collapse()">Stats</a>
-        </li>
-      </ng-template>
-      <ng-template #notBisq>
-        <li class="nav-item" routerLinkActive="active">
-          <a class="nav-link" [routerLink]="['/graphs' | relativeUrl]" (click)="collapse()">Graphs</a>
-        </li>
-        <li class="nav-item" routerLinkActive="active">
-          <a class="nav-link" [routerLink]="['/tv' | relativeUrl]" (click)="collapse()">TV view &nbsp;<img src="./resources/expand.png" width="15"/></a>
-        </li>
-      </ng-template>
-      <li *ngIf="network === 'liquid'" class="nav-item" routerLinkActive="active">
-        <a class="nav-link" [routerLink]="['liquid/assets']" (click)="collapse()">Assets</a>
+  <div class="navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav {{ network.val }}">
+
+      <li class="nav-item" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" id="btn-home">
+        <a class="nav-link" [routerLink]="['/' | relativeUrl]" (click)="collapse()"><fa-icon [icon]="['fas', 'tachometer-alt']" [fixedWidth]="true" i18n-title="master-page.dashboard" title="Dashboard"></fa-icon></a>
       </li>
-      <li class="nav-item" routerLinkActive="active">
-        <a class="nav-link" [routerLink]="['/about' | relativeUrl]" (click)="collapse()">About</a>
+      <li class="nav-item" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" id="btn-home" *ngIf="network.val === '' && stateService.env.ACCELERATOR">
+        <a class="nav-link" [routerLink]="['/acceleration' | relativeUrl]" (click)="collapse()">
+          <fa-icon [icon]="['fas', 'rocket']" [fixedWidth]="true" i18n-title="master-page.accelerator-dashboard" title="Accelerator Dashboard"></fa-icon>
+          <span class="badge badge-pill badge-warning beta" i18n="beta">beta</span>
+        </a>
+      </li>
+      <li class="nav-item" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" id="btn-pools" *ngIf="stateService.env.MINING_DASHBOARD">
+        <a class="nav-link" [routerLink]="['/mining' | relativeUrl]" (click)="collapse()"><fa-icon [icon]="['fas', 'hammer']" [fixedWidth]="true" i18n-title="mining.mining-dashboard" title="Mining Dashboard"></fa-icon></a>
+      </li>
+      <li class="nav-item" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" id="btn-pools" *ngIf="stateService.env.LIGHTNING">
+        <a class="nav-link" [routerLink]="['/lightning' | relativeUrl]" (click)="collapse()"><fa-icon [icon]="['fas', 'bolt']" [fixedWidth]="true" i18n-title="master-page.lightning" title="Lightning Explorer"></fa-icon>
+        </a>
+      </li>
+      <li class="nav-item" routerLinkActive="active" id="btn-blocks" *ngIf="!stateService.env.MINING_DASHBOARD">
+        <a class="nav-link" [routerLink]="['/blocks' | relativeUrl]" (click)="collapse()"><fa-icon [icon]="['fas', 'cubes']" [fixedWidth]="true" i18n-title="master-page.blocks" title="Blocks"></fa-icon></a>
+      </li>
+      <li class="nav-item" routerLinkActive="active" id="btn-graphs">
+        <a class="nav-link" [routerLink]="['/graphs' | relativeUrl]" (click)="collapse()"><fa-icon [icon]="['fas', 'chart-area']" [fixedWidth]="true" i18n-title="master-page.graphs" title="Graphs"></fa-icon></a>
+      </li>
+      <li class="nav-item" routerLinkActive="active" id="btn-docs">
+        <a class="nav-link" [routerLink]="['/docs' | relativeUrl ]" (click)="collapse()"><fa-icon [icon]="['fas', 'book']" [fixedWidth]="true" i18n-title="documentation.title" title="Documentation"></fa-icon></a>
+      </li>
+      <li class="nav-item" routerLinkActive="active" id="btn-about">
+        <a class="nav-link" [routerLink]="['/about']" (click)="collapse()"><fa-icon [icon]="['fas', 'info-circle']" [fixedWidth]="true" i18n-title="master-page.about" title="About"></fa-icon></a>
       </li>
     </ul>
-    <app-search-form location="top" (searchTriggered)="collapse()"></app-search-form>
+    <app-search-form [hamburgerOpen]="user != null" class="search-form-container" location="top" (searchTriggered)="collapse()"></app-search-form>
   </div>
 </nav>
+<app-menu *ngIf="servicesEnabled" [navOpen]="menuOpen" (loggedOut)="onLoggedOut()" (menuToggled)="menuToggled($event)"></app-menu>
 </header>
 
-<br />
+<div class="d-flex" style="overflow: clip">
+  <div *ngIf="!servicesEnabled" class="empty-sidenav"><!-- empty sidenav needed to push footer down the screen --></div>
 
-<router-outlet></router-outlet>
+  <div class="flex-grow-1 d-flex flex-column">
+    <app-testnet-alert *ngIf="network.val === 'testnet' || network.val === 'signet'"></app-testnet-alert>
 
-<br>
+    <main style="min-width: 375px; max-width: 100vw">
+      <router-outlet></router-outlet>
+    </main>
 
-<ng-template [ngIf]="network !== 'bisq'">
-  <br><br>
+    <div class="flex-grow-1"></div>
+    <app-global-footer *ngIf="footerVisible"></app-global-footer>
+  </div>
+</div>
 
-  <app-footer></app-footer>
-</ng-template>
+</ng-container>

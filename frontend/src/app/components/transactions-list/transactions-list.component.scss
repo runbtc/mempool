@@ -1,84 +1,212 @@
+
 .arrow-td {
-	width: 22px;
+	width: 30px;
+	padding-top: 0;
+	padding-bottom: 0;
 }
-
-.arrow {
-	display: inline-block!important;
+.green, .grey, .red {
+	font-size: 16px;
+  top: 1px;
 	position: relative;
-	width: 14px;
-	height: 22px;
-	box-sizing: content-box
+	@media( min-width: 576px){
+		font-size: 19px;
+	}
+}
+.green {
+  color:#28a745;
 }
 
-.arrow:before {
-	position: absolute;
-	content: '';
-	margin: auto;
-	top: 0;
-	bottom: 0;
-	left: 0;
-	right: calc(-1*30px/3);
+.red {
+  color:#dc3545;
+}
+
+.grey {
+  color:#6c757d;
+}
+
+.mobile-bottomcol {
+	margin-top: 15px;
+	@media (min-width: 992px) {
+		margin-top: 0px;
+	}
+}
+
+.smaller-text {
+	font-size: 12px;
+	@media (min-width: 576px) {
+		font-size: 14px !important;
+	}
+}
+
+.row{
+	flex-direction: column;
+	@media (min-width: 992px) {
+		flex-direction: row;
+	}
+}
+
+td.amount {
+	width: 36%;
+	@media (max-width: 576px) {
+		width: 50%;
+	}
+}
+td.amount.large {
+	width: 45%;
+	@media (max-width: 576px) {
+		width: 60%;
+	}
+}
+
+.extra-info {
+	display: none;
+	@media (min-width: 576px) {
+		display: inline-table;
+	}
+	.fiat {
+		font-size: 14px;
+		margin-left: 10px;
+		text-align: right;
+	}
+	.sats {
+		color: #ffffff66;
+		font-size: 11px;
+	}
+}
+
+.transaction-fee {
+	display: block;
+	margin: 0px auto 5px;
+	@media (min-width: 576px) {
+		display: inline-table;
+	}
+}
+
+.btn-container {
+	text-align: right;
+	@media (min-width: 576px) {
+		display: inline-table;
+		float: right;
+	}
+}
+.fiat {
+	margin-left: 10px;
+}
+
+.tx-page-container {
+	display: flex;
+	flex-direction: row;
+	align-items: baseline;
+	white-space: nowrap;
+	padding: 10px;
+	margin-bottom: 10px;
+	margin-top: 10px;
+}
+.assetBox {
+	background-color: #653b9c90;
+}
+
+.details-container {
+	padding: 0px;
+	tr td {
+		padding: 0.75rem;
+		font-size: 12px;
+		&:first-child {
+			color: #ffffff66;
+			white-space: pre-wrap;
+			width: 150px;
+		}
+		&:nth-child(2) {
+			word-break: break-all;
+			white-space: normal;
+			font-family: "Courier New", Courier, monospace;
+		}
+	}
+}
+
+.error-unblinded {
+	display: block;
+	width: 100%;
+	color: #d43131;
+	text-align: right;
+  margin-top: 0px;
+  margin-bottom: 10px;
+}
+
+h2 {
+  line-height: 1;
+}
+
+.highlight {
+	background-color: #181b2d;
+}
+
+.summary {
+	margin-top: 10px;
+}
+
+.address {
+	font-family: monospace;
+}
+
+.p2pk-address {
+	display: inline-block;
+	margin-left: 1em;
+	max-width: 100px;
+	@media (min-width: 576px) {
+		max-width: 200px
+	}
+}
+
+.grey-info-text {
+	color:#6c757d;
+	font-style: italic;
+	font-size: 12px;
+}
+
+.tx-link {
 	width: 0;
-  height: 0;
-	border-top: 6.66px solid transparent;
-  border-bottom: 6.66px solid transparent
+	flex-grow: 1;
+	margin-inline-end: 2em;
 }
 
-.arrow:after {
-	position: absolute;
-	content: '';
-	margin: auto;
-	top: 0;
-	bottom: 0;
-	left: 0;
-	right: calc(30px/6);
-	width: calc(30px/3);
-	height: calc(20px/3);
-	background: rgba(0, 0, 0, 0);
-}
-
-.arrow.green:before {
-  border-left: 10px solid #28a745;
-}
-.arrow.green:after {
-  background-color:#28a745;
-}
-
-.arrow.red:before {
-  border-left: 10px solid #dc3545;
-}
-.arrow.red:after {
-  background-color:#dc3545;
-}
-
-.arrow.grey:before {
-  border-left: 10px solid #6c757d;
-}
-
-.arrow.grey:after {
-  background-color:#6c757d;
-}
-
-.scriptmessage {
-	max-width: 280px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	vertical-align: middle;
-}
-
-.scriptmessage.longer {
-	max-width: 500px;
-}
-
-@media (max-width: 767.98px) {
-	.mobile-bottomcol {
-		margin-top: 15px;
+.vin-witness {
+	.witness-item.accordioned {
+		max-height: 300px;
+		overflow: hidden;
 	}
 
-	.scriptmessage {
-		max-width: 90px !important;
+	input:checked + .witness-item.accordioned {
+		max-height: none;
 	}
-	.scriptmessage.longer {
-		max-width: 280px !important;
+
+	.witness-toggle {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		justify-content: space-between;
+		margin-bottom: 1em;
+
+		.show-all {
+			display: inline;
+		}
+		.show-less {
+			display: none;
+		}
+		.ellipsis {
+			visibility: visible;
+		}
+	}
+
+	input:checked ~ .witness-toggle {
+		.show-all {
+			display: none;
+		}
+		.show-less {
+			display: inline;
+		}
+		.ellipsis {
+			visibility: hidden;
+		}
 	}
 }

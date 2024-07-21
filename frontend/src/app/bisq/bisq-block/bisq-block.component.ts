@@ -1,13 +1,14 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { BisqBlock } from 'src/app/bisq/bisq.interfaces';
+import { BisqBlock } from '../../bisq/bisq.interfaces';
 import { Location } from '@angular/common';
 import { BisqApiService } from '../bisq-api.service';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { Subscription, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
-import { SeoService } from 'src/app/services/seo.service';
-import { ElectrsApiService } from 'src/app/services/electrs-api.service';
+import { SeoService } from '../../services/seo.service';
+import { ElectrsApiService } from '../../services/electrs-api.service';
 import { HttpErrorResponse } from '@angular/common/http';
+import { WebsocketService } from '../../services/websocket.service';
 
 @Component({
   selector: 'app-bisq-block',
@@ -23,6 +24,7 @@ export class BisqBlockComponent implements OnInit, OnDestroy {
   error: HttpErrorResponse | null;
 
   constructor(
+    private websocketService: WebsocketService,
     private bisqApiService: BisqApiService,
     private route: ActivatedRoute,
     private seoService: SeoService,
@@ -32,6 +34,8 @@ export class BisqBlockComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit(): void {
+    this.websocketService.want(['blocks']);
+
     this.subscription = this.route.paramMap
       .pipe(
         switchMap((params: ParamMap) => {
@@ -65,6 +69,7 @@ export class BisqBlockComponent implements OnInit, OnDestroy {
                   this.location.replaceState(
                     this.router.createUrlTree(['/bisq/block/', hash]).toString()
                   );
+                  this.seoService.updateCanonical(this.location.path());
                   return this.bisqApiService.getBlock$(this.blockHash)
                     .pipe(catchError(this.caughtHttpError.bind(this)));
                 }),
@@ -78,11 +83,13 @@ export class BisqBlockComponent implements OnInit, OnDestroy {
       )
       .subscribe((block: BisqBlock) => {
         if (!block) {
+          this.seoService.logSoft404();
           return;
         }
         this.isLoading = false;
         this.blockHeight = block.height;
-        this.seoService.setTitle('Block: #' + block.height + ': ' + block.hash, true);
+        this.seoService.setTitle($localize`:@@bisq-block.component.browser-title:Block ${block.height}:BLOCK_HEIGHT:: ${block.hash}:BLOCK_HASH:`);
+        this.seoService.setDescription($localize`:@@meta.description.bisq.block:See all BSQ transactions in Bitcoin block ${block.height}:BLOCK_HEIGHT: (block hash ${block.hash}:BLOCK_HASH:).`);
         this.block = block;
       });
   }
@@ -93,6 +100,7 @@ export class BisqBlockComponent implements OnInit, OnDestroy {
 
   caughtHttpError(err: HttpErrorResponse){
     this.error = err;
+    this.seoService.logSoft404();
     return of(null);
   }
 }

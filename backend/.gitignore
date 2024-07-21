@@ -1,7 +1,17 @@
 # See http://help.github.com/ignore-files/ for more about ignoring files.
 
-# production config
+# production config and external assets
+!mempool-config.template.json
+!mempool-config.sample.json
 mempool-config.json
+pools.json
+icons.json
+
+# docker
+Dockerfile
+GeoIP
+start.sh
+wait-for-it.sh
 
 # compiled output
 /dist
@@ -42,4 +52,8 @@ testem.log
 .DS_Store
 Thumbs.db
 
-cache.json
+# package folder (npm run package output)
+/package
+
+# Rust GBT folder (We build externally first)
+/rust-gbt

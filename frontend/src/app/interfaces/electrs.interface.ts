@@ -1,3 +1,6 @@
+import { Price } from '../services/price.service';
+import { IChannel } from './node-api.interface';
+
 export interface Transaction {
   txid: string;
   version: number;
@@ -11,6 +14,37 @@ export interface Transaction {
 
   // Custom properties
   firstSeen?: number;
+  feePerVsize?: number;
+  effectiveFeePerVsize?: number;
+  ancestors?: Ancestor[];
+  bestDescendant?: BestDescendant | null;
+  cpfpChecked?: boolean;
+  acceleration?: boolean;
+  deleteAfter?: number;
+  _unblinded?: any;
+  _deduced?: boolean;
+  _outspends?: Outspend[];
+  _channels?: TransactionChannels;
+  price?: Price;
+  sigops?: number;
+  flags?: bigint;
+}
+
+export interface TransactionChannels {
+  inputs: { [vin: number]: IChannel };
+  outputs: { [vout: number]: IChannel };
+}
+
+interface Ancestor {
+  txid: string;
+  weight: number;
+  fee: number;
+}
+
+interface BestDescendant {
+  txid: string;
+  weight: number;
+  fee: number;
 }
 
 export interface Recent {
@@ -34,6 +68,8 @@ export interface Vin {
   // Elements
   is_pegin?: boolean;
   issuance?: Issuance;
+  // Custom
+  lazy?: boolean;
 }
 
 interface Issuance {
@@ -52,7 +88,7 @@ export interface Vout {
   scriptpubkey: string;
   scriptpubkey_asm: string;
   scriptpubkey_type: string;
-  scriptpubkey_address: string;
+  scriptpubkey_address?: string;
   value: number;
   // Elements
   valuecommitment?: number;
@@ -80,27 +116,45 @@ export interface Block {
   version: number;
   timestamp: number;
   bits: number;
-  nounce: number;
+  nonce: number;
   difficulty: number;
   merkle_root: string;
   tx_count: number;
   size: number;
   weight: number;
   previousblockhash: string;
-
-  // Custom properties
-  medianFee?: number;
-  feeRange?: number[];
-  reward?: number;
-  coinbaseTx?: Transaction;
-  matchRate: number;
-  stage: number;
+  stale?: boolean;
+  canonical?: string;
 }
 
 export interface Address {
+  electrum?: boolean;
   address: string;
   chain_stats: ChainStats;
   mempool_stats: MempoolStats;
+  is_pubkey?: boolean;
+}
+
+export interface ScriptHash {
+  electrum?: boolean;
+  scripthash: string;
+  chain_stats: ChainStats;
+  mempool_stats: MempoolStats;
+}
+
+export interface AddressOrScriptHash {
+  electrum?: boolean;
+  address?: string;
+  scripthash?: string;
+  chain_stats: ChainStats;
+  mempool_stats: MempoolStats;
+}
+
+export interface AddressTxSummary {
+  txid: string;
+  value: number;
+  height: number;
+  time: number;
 }
 
 export interface ChainStats {
@@ -135,6 +189,19 @@ export interface Asset {
   status: Status;
   chain_stats: AssetStats;
   mempool_stats: AssetStats;
+}
+
+export interface AssetExtended extends Asset {
+  name: string;
+  ticker: string;
+  precision: number;
+  entity: Entity;
+  version: number;
+  issuer_pubkey: string;
+}
+
+export interface Entity {
+  domain: string;
 }
 
 interface IssuanceTxin {

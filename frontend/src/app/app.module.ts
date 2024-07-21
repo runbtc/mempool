@@ -1,96 +1,75 @@
 import { BrowserModule } from '@angular/platform-browser';
-import { NgModule } from '@angular/core';
-import { HttpClientModule } from '@angular/common/http';
-import { ReactiveFormsModule } from '@angular/forms';
+import { ModuleWithProviders, NgModule } from '@angular/core';
+import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { NgbButtonsModule, NgbPaginationModule, NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
-import { InfiniteScrollModule } from 'ngx-infinite-scroll';
-
+import { ZONE_SERVICE } from './injection-tokens';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './components/app/app.component';
-
-import { StartComponent } from './components/start/start.component';
 import { ElectrsApiService } from './services/electrs-api.service';
-import { TransactionComponent } from './components/transaction/transaction.component';
-import { TransactionsListComponent } from './components/transactions-list/transactions-list.component';
-import { AmountComponent } from './components/amount/amount.component';
 import { StateService } from './services/state.service';
-import { BlockComponent } from './components/block/block.component';
-import { AddressComponent } from './components/address/address.component';
-import { SearchFormComponent } from './components/search-form/search-form.component';
-import { LatestBlocksComponent } from './components/latest-blocks/latest-blocks.component';
+import { CacheService } from './services/cache.service';
+import { PriceService } from './services/price.service';
+import { EnterpriseService } from './services/enterprise.service';
 import { WebsocketService } from './services/websocket.service';
-import { AddressLabelsComponent } from './components/address-labels/address-labels.component';
-import { MempoolBlocksComponent } from './components/mempool-blocks/mempool-blocks.component';
-import { MasterPageComponent } from './components/master-page/master-page.component';
-import { AboutComponent } from './components/about/about.component';
-import { TelevisionComponent } from './components/television/television.component';
-import { StatisticsComponent } from './components/statistics/statistics.component';
-import { ChartistComponent } from './components/statistics/chartist.component';
-import { BlockchainBlocksComponent } from './components/blockchain-blocks/blockchain-blocks.component';
-import { BlockchainComponent } from './components/blockchain/blockchain.component';
-import { FooterComponent } from './components/footer/footer.component';
 import { AudioService } from './services/audio.service';
-import { MempoolBlockComponent } from './components/mempool-block/mempool-block.component';
-import { FeeDistributionGraphComponent } from './components/fee-distribution-graph/fee-distribution-graph.component';
-import { TimespanComponent } from './components/timespan/timespan.component';
 import { SeoService } from './services/seo.service';
-import { MempoolGraphComponent } from './components/mempool-graph/mempool-graph.component';
-import { AssetComponent } from './components/asset/asset.component';
-import { AssetsComponent } from './assets/assets.component';
-import { StatusViewComponent } from './components/status-view/status-view.component';
-import { MinerComponent } from './components/miner/miner.component';
+import { OpenGraphService } from './services/opengraph.service';
+import { ZoneService } from './services/zone-shim.service';
 import { SharedModule } from './shared/shared.module';
+import { StorageService } from './services/storage.service';
+import { HttpCacheInterceptor } from './services/http-cache.interceptor';
+import { LanguageService } from './services/language.service';
+import { FiatShortenerPipe } from './shared/pipes/fiat-shortener.pipe';
+import { FiatCurrencyPipe } from './shared/pipes/fiat-currency.pipe';
+import { ShortenStringPipe } from './shared/pipes/shorten-string-pipe/shorten-string.pipe';
+import { CapAddressPipe } from './shared/pipes/cap-address-pipe/cap-address-pipe';
+import { AppPreloadingStrategy } from './app.preloading-strategy';
+import { ServicesApiServices } from './services/services-api.service';
+
+const providers = [
+  ElectrsApiService,
+  StateService,
+  CacheService,
+  PriceService,
+  WebsocketService,
+  AudioService,
+  SeoService,
+  OpenGraphService,
+  StorageService,
+  EnterpriseService,
+  LanguageService,
+  ShortenStringPipe,
+  FiatShortenerPipe,
+  FiatCurrencyPipe,
+  CapAddressPipe,
+  AppPreloadingStrategy,
+  ServicesApiServices,
+  { provide: HTTP_INTERCEPTORS, useClass: HttpCacheInterceptor, multi: true },
+  { provide: ZONE_SERVICE, useClass: ZoneService },
+];
 
 @NgModule({
   declarations: [
     AppComponent,
-    AboutComponent,
-    MasterPageComponent,
-    TelevisionComponent,
-    BlockchainComponent,
-    StartComponent,
-    BlockchainBlocksComponent,
-    StatisticsComponent,
-    TransactionComponent,
-    BlockComponent,
-    TransactionsListComponent,
-    AddressComponent,
-    AmountComponent,
-    SearchFormComponent,
-    LatestBlocksComponent,
-    TimespanComponent,
-    AddressLabelsComponent,
-    MempoolBlocksComponent,
-    ChartistComponent,
-    FooterComponent,
-    MempoolBlockComponent,
-    FeeDistributionGraphComponent,
-    MempoolGraphComponent,
-    AssetComponent,
-    AssetsComponent,
-    MinerComponent,
-    StatusViewComponent,
   ],
   imports: [
     BrowserModule,
     AppRoutingModule,
     HttpClientModule,
-    ReactiveFormsModule,
     BrowserAnimationsModule,
-    NgbButtonsModule,
-    NgbPaginationModule,
-    NgbDropdownModule,
-    InfiniteScrollModule,
     SharedModule,
   ],
-  providers: [
-    ElectrsApiService,
-    StateService,
-    WebsocketService,
-    AudioService,
-    SeoService,
-  ],
+  providers: providers,
   bootstrap: [AppComponent]
 })
 export class AppModule { }
+
+@NgModule({})
+export class MempoolSharedModule{
+  static forRoot(): ModuleWithProviders<MempoolSharedModule> {
+    return {
+      ngModule: AppModule,
+      providers: providers
+    };
+  }
+}

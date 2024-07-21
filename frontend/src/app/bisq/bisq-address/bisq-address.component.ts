@@ -1,10 +1,11 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { SeoService } from 'src/app/services/seo.service';
+import { SeoService } from '../../services/seo.service';
 import { switchMap, filter, catchError } from 'rxjs/operators';
 import { ParamMap, ActivatedRoute } from '@angular/router';
 import { Subscription, of } from 'rxjs';
 import { BisqTransaction } from '../bisq.interfaces';
 import { BisqApiService } from '../bisq-api.service';
+import { WebsocketService } from '../../services/websocket.service';
 
 @Component({
   selector: 'app-bisq-address',
@@ -22,12 +23,15 @@ export class BisqAddressComponent implements OnInit, OnDestroy {
   totalSent = 0;
 
   constructor(
+    private websocketService: WebsocketService,
     private route: ActivatedRoute,
     private seoService: SeoService,
     private bisqApiService: BisqApiService,
   ) { }
 
   ngOnInit() {
+    this.websocketService.want(['blocks']);
+
     this.mainSubscription = this.route.paramMap
       .pipe(
         switchMap((params: ParamMap) => {
@@ -36,13 +40,15 @@ export class BisqAddressComponent implements OnInit, OnDestroy {
           this.transactions = null;
           document.body.scrollTo(0, 0);
           this.addressString = params.get('id') || '';
-          this.seoService.setTitle('Address: ' + this.addressString, true);
+          this.seoService.setTitle($localize`:@@bisq-address.component.browser-title:Address: ${this.addressString}:INTERPOLATION:`);
+          this.seoService.setDescription($localize`:@@meta.description.bisq.address:See current balance, pending transactions, and history of confirmed transactions for BSQ address ${this.addressString}:INTERPOLATION:.`);
 
           return this.bisqApiService.getAddress$(this.addressString)
             .pipe(
               catchError((err) => {
                 this.isLoadingAddress = false;
                 this.error = err;
+                this.seoService.logSoft404();
                 console.log(err);
                 return of(null);
               })
@@ -58,6 +64,7 @@ export class BisqAddressComponent implements OnInit, OnDestroy {
       (error) => {
         console.log(error);
         this.error = error;
+        this.seoService.logSoft404();
         this.isLoadingAddress = false;
       });
   }

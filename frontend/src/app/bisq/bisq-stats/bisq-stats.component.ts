@@ -1,8 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { BisqApiService } from '../bisq-api.service';
 import { BisqStats } from '../bisq.interfaces';
-import { SeoService } from 'src/app/services/seo.service';
-import { StateService } from 'src/app/services/state.service';
+import { SeoService } from '../../services/seo.service';
+import { StateService } from '../../services/state.service';
+import { WebsocketService } from '../../services/websocket.service';
 
 @Component({
   selector: 'app-bisq-stats',
@@ -15,14 +16,17 @@ export class BisqStatsComponent implements OnInit {
   price: number;
 
   constructor(
+    private websocketService: WebsocketService,
     private bisqApiService: BisqApiService,
     private seoService: SeoService,
     private stateService: StateService,
   ) { }
 
   ngOnInit() {
-    this.seoService.setTitle('BSQ Statistics', false);
+    this.websocketService.want(['blocks']);
 
+    this.seoService.setTitle($localize`:@@2a30a4cdb123a03facc5ab8c5b3e6d8b8dbbc3d4:BSQ statistics`);
+    this.seoService.setDescription($localize`:@@meta.description.bisq.stats:See high-level stats on the BSQ economy: supply metrics, number of addresses, BSQ price, market cap, and more.`);
     this.stateService.bsqPrice$
       .subscribe((bsqPrice) => {
         this.price = bsqPrice;

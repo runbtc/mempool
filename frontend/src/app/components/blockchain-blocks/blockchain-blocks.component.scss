@@ -1,6 +1,6 @@
 .bitcoin-block {
-  width: 125px;
-  height: 125px;
+  width: var(--block-size);
+  height: var(--block-size);
 }
 
 .blockLink {
@@ -11,21 +11,39 @@
   z-index: 10;
 }
 
+.blockLink:hover {
+  text-decoration: none;
+}
+
+.blockLink.disabled {
+  pointer-events: none;
+}
+
 .mined-block {
   position: absolute;
   top: 0px;
-  transition: 2s;
+  transition: background 2s, left 2s, transform 1s, opacity 1s;
+}
+
+.mined-block.offscreen {
+  opacity: 0;
+}
+
+.mined-block.placeholder-block {
+  background: none !important;
 }
 
 .block-size {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: bold;
 }
 
 .blocks-container {
+  --block-size: 125px;
+  --block-offset: calc(0.32 * var(--block-size));
   position: absolute;
   top: 0px;
-  left: 40px;
+  left: var(--block-offset);
 }
 
 .block-body {
@@ -33,21 +51,25 @@
 }
 
 .time-difference {
-  position: absolute;
-  bottom: 10px;
-  text-align: center;
-  width: 100%;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .fees {
-  font-size: 14px;
-  margin-top: 12px;
-  margin-bottom: 6px;
+  font-size: 12px;
+  margin-top: 10px;
+  margin-bottom: 2px;
+}
+
+.fee-span {
+  font-size: 11px;
+  margin-bottom: 5px;
+  color: #fff000;
 }
 
 .transaction-count {
-  font-size: 12px;
+  font-size: 10px;
+  margin-top: 3px;
+  margin-bottom: 4px;
 }
 
 .block-height {
@@ -61,11 +83,11 @@
 
 .bitcoin-block::after {
   content: '';
-  width: 125px;
-  height: 24px;
+  width: var(--block-size);
+  height: calc(0.192 * var(--block-size));
   position:absolute;
-  top: -24px;
-  left: -20px;
+  top: calc(-0.192 * var(--block-size));
+  left: calc(-0.16 * var(--block-size));
   background-color: #232838;
   transform:skew(40deg);
   transform-origin:top;
@@ -73,15 +95,25 @@
 
 .bitcoin-block::before {
   content: '';
-  width: 20px;
-  height: 125px;
+  width: calc(0.16 * var(--block-size));
+  height: var(--block-size);
   position: absolute;
-  top: -12px;
-  left: -20px;
+  top: calc(-0.096 * var(--block-size));
+  left: calc(-0.16 * var(--block-size));
   background-color: #191c27;
 
   transform: skewY(50deg);
   transform-origin: top;
+}
+
+.bitcoin-block.placeholder-block::after {
+  content: none;
+  background: 0;
+}
+
+.bitcoin-block.placeholder-block::before {
+  content: none;
+  background: 0;
 }
 
 .black-background {
@@ -99,4 +131,59 @@
   border-left: 35px solid transparent;
   border-right: 35px solid transparent;
   border-bottom: 35px solid #FFF;
+}
+
+.flashing {
+  /* force compositing */
+  will-change: opacity;
+  transform: translateZ(0);
+  /* effective max frame rate = (#keyframes - 1) x steps / duration */
+  animation: opacityPulse 2s steps(30, end);
+  animation-iteration-count: infinite;
+  opacity: 1;
+}
+
+.loading .bitcoin-block.mined-block {
+  background: #2d3348;
+}
+
+@keyframes opacityPulse {
+  0% {opacity: 0.7;}
+  50% {opacity: 1.0;}
+  100% {opacity: 0.7;}
+}
+
+.badge {
+  position: relative;
+  top: 15px;
+  z-index: 101;
+}
+
+.animated {
+  transition: all 0.15s ease-in-out;
+}
+.show {
+  opacity: 1;
+}
+.hide {
+  opacity: 0.4;
+  pointer-events : none;
+}
+
+.time-ltr {
+  .bitcoin-block {
+    transform: scaleX(-1);
+  }
+}
+
+.spotlight-bottom {
+  position: absolute;
+  width: calc(0.6 * var(--block-size));
+  height: calc(0.25 * var(--block-size));
+  border-left: solid calc(0.3 * var(--block-size)) transparent;
+  border-bottom: solid calc(0.3 * var(--block-size)) white;
+  border-right: solid calc(0.3 * var(--block-size)) transparent;
+  transform: translate(calc(0.2 * var(--block-size)), calc(1.1 * var(--block-size)));
+  border-radius: 2px;
+  z-index: -1;
 }

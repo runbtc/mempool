@@ -1,196 +1,168 @@
 import { NgModule } from '@angular/core';
 import { Routes, RouterModule } from '@angular/router';
-import { StartComponent } from './components/start/start.component';
-import { TransactionComponent } from './components/transaction/transaction.component';
-import { BlockComponent } from './components/block/block.component';
-import { AddressComponent } from './components/address/address.component';
-import { MasterPageComponent } from './components/master-page/master-page.component';
-import { AboutComponent } from './components/about/about.component';
-import { TelevisionComponent } from './components/television/television.component';
-import { StatisticsComponent } from './components/statistics/statistics.component';
-import { MempoolBlockComponent } from './components/mempool-block/mempool-block.component';
-import { LatestBlocksComponent } from './components/latest-blocks/latest-blocks.component';
-import { AssetComponent } from './components/asset/asset.component';
-import { AssetsComponent } from './assets/assets.component';
+import { AppPreloadingStrategy } from './app.preloading-strategy'
+import { BlockViewComponent } from './components/block-view/block-view.component';
+import { EightBlocksComponent } from './components/eight-blocks/eight-blocks.component';
+import { MempoolBlockViewComponent } from './components/mempool-block-view/mempool-block-view.component';
+import { ClockComponent } from './components/clock/clock.component';
 import { StatusViewComponent } from './components/status-view/status-view.component';
+import { AddressGroupComponent } from './components/address-group/address-group.component';
 
-const routes: Routes = [
-  {
-    path: '',
-    component: MasterPageComponent,
-    children: [
-      {
-        path: '',
-        component: StartComponent,
-        children: [
-          {
-            path: '',
-            component: LatestBlocksComponent
-          },
-          {
-            path: 'tx/:id',
-            component: TransactionComponent
-          },
-          {
-            path: 'block/:id',
-            component: BlockComponent
-          },
-          {
-            path: 'mempool-block/:id',
-            component: MempoolBlockComponent
-          },
-        ],
-      },
-      {
-        path: 'graphs',
-        component: StatisticsComponent,
-      },
-      {
-        path: 'about',
-        component: AboutComponent,
-      },
-      {
-        path: 'address/:id',
-        children: [],
-        component: AddressComponent
-      },
-    ],
-  },
-  {
-    path: 'liquid',
-    children: [
-      {
-        path: '',
-        component: MasterPageComponent,
-        children: [
-          {
-            path: '',
-            component: StartComponent,
-            children: [
-              {
-                path: '',
-                component: LatestBlocksComponent
-              },
-              {
-                path: 'tx/:id',
-                component: TransactionComponent
-              },
-              {
-                path: 'block/:id',
-                component: BlockComponent
-              },
-              {
-                path: 'mempool-block/:id',
-                component: MempoolBlockComponent
-              },
-            ],
-          },
-          {
-            path: 'graphs',
-            component: StatisticsComponent,
-          },
-          {
-            path: 'about',
-            component: AboutComponent,
-          },
-          {
-            path: 'address/:id',
-            component: AddressComponent
-          },
-          {
-            path: 'asset/:id',
-            component: AssetComponent
-          },
-          {
-            path: 'assets',
-            component: AssetsComponent,
-          },
-        ],
-      },
-      {
-        path: 'tv',
-        component: TelevisionComponent
-      },
-      {
-        path: 'status',
-        component: StatusViewComponent
-      },
-      {
-        path: '**',
-        redirectTo: ''
-      },
-    ]
-  },
+const browserWindow = window || {};
+// @ts-ignore
+const browserWindowEnv = browserWindow.__env || {};
+
+let routes: Routes = [
   {
     path: 'testnet',
     children: [
       {
         path: '',
-        component: MasterPageComponent,
-        children: [
-          {
-            path: '',
-            component: StartComponent,
-            children: [
-              {
-                path: '',
-                component: LatestBlocksComponent
-              },
-              {
-                path: 'tx/:id',
-                component: TransactionComponent
-              },
-              {
-                path: 'block/:id',
-                component: BlockComponent
-              },
-              {
-                path: 'mempool-block/:id',
-                component: MempoolBlockComponent
-              },
-            ],
-          },
-          {
-            path: 'graphs',
-            component: StatisticsComponent,
-          },
-          {
-            path: 'about',
-            component: AboutComponent,
-          },
-          {
-            path: 'address/:id',
-            children: [],
-            component: AddressComponent
-          },
-        ],
+        pathMatch: 'full',
+        loadChildren: () => import('./bitcoin-graphs.module').then(m => m.BitcoinGraphsModule),
+        data: { preload: true },
       },
       {
-        path: 'tv',
-        component: TelevisionComponent
+        path: '',
+        loadChildren: () => import('./master-page.module').then(m => m.MasterPageModule),
+        data: { preload: true },
+      },
+      {
+        path: 'wallet',
+        children: [],
+        component: AddressGroupComponent,
+        data: {
+          networkSpecific: true,
+        }
       },
       {
         path: 'status',
+        data: { networks: ['bitcoin', 'liquid'] },
         component: StatusViewComponent
       },
       {
+        path: '',
+        loadChildren: () => import('./bitcoin-graphs.module').then(m => m.BitcoinGraphsModule),
+        data: { preload: true },
+      },
+      {
         path: '**',
-        redirectTo: ''
+        redirectTo: '/testnet'
       },
     ]
   },
   {
-    path: 'bisq',
-    component: MasterPageComponent,
-    loadChildren: () => import('./bisq/bisq.module').then(m => m.BisqModule)
+    path: 'signet',
+    children: [
+      {
+        path: 'mining/blocks',
+        redirectTo: 'blocks',
+        pathMatch: 'full'
+      },
+      {
+        path: '',
+        pathMatch: 'full',
+        loadChildren: () => import('./bitcoin-graphs.module').then(m => m.BitcoinGraphsModule),
+        data: { preload: true },
+      },
+      {
+        path: '',
+        loadChildren: () => import('./master-page.module').then(m => m.MasterPageModule),
+        data: { preload: true },
+      },
+      {
+        path: 'wallet',
+        children: [],
+        component: AddressGroupComponent,
+        data: {
+          networkSpecific: true,
+        }
+      },
+      {
+        path: 'status',
+        data: { networks: ['bitcoin', 'liquid'] },
+        component: StatusViewComponent
+      },
+      {
+        path: '',
+        loadChildren: () => import('./bitcoin-graphs.module').then(m => m.BitcoinGraphsModule),
+        data: { preload: true },
+      },
+      {
+        path: '**',
+        redirectTo: '/signet'
+      },
+    ]
   },
   {
-    path: 'tv',
-    component: TelevisionComponent,
+    path: '',
+    pathMatch: 'full',
+    loadChildren: () => import('./bitcoin-graphs.module').then(m => m.BitcoinGraphsModule),
+    data: { preload: true },
+  },
+  {
+    path: '',
+    loadChildren: () => import('./master-page.module').then(m => m.MasterPageModule),
+    data: { preload: true },
+  },
+  {
+    path: 'wallet',
+    children: [],
+    component: AddressGroupComponent,
+    data: {
+      networkSpecific: true,
+    }
+  },
+  {
+    path: 'preview',
+    children: [
+      {
+        path: '',
+        loadChildren: () => import('./previews.module').then(m => m.PreviewsModule)
+      },
+      {
+        path: 'testnet',
+        loadChildren: () => import('./previews.module').then(m => m.PreviewsModule)
+      },
+      {
+        path: 'signet',
+        loadChildren: () => import('./previews.module').then(m => m.PreviewsModule)
+      },
+    ],
+  },
+  {
+    path: 'clock',
+    redirectTo: 'clock/mempool/0'
+  },
+  {
+    path: 'clock/:mode',
+    redirectTo: 'clock/:mode/0'
+  },
+  {
+    path: 'clock/:mode/:index',
+    component: ClockComponent,
+  },
+  {
+    path: 'view/block/:id',
+    component: BlockViewComponent,
+  },
+  {
+    path: 'view/mempool-block/:index',
+    component: MempoolBlockViewComponent,
+  },
+  {
+    path: 'view/blocks',
+    component: EightBlocksComponent,
   },
   {
     path: 'status',
+    data: { networks: ['bitcoin', 'liquid'] },
     component: StatusViewComponent
+  },
+  {
+    path: '',
+    loadChildren: () => import('./bitcoin-graphs.module').then(m => m.BitcoinGraphsModule),
+    data: { preload: true },
   },
   {
     path: '**',
@@ -198,8 +170,108 @@ const routes: Routes = [
   },
 ];
 
+if (browserWindowEnv && browserWindowEnv.BASE_MODULE === 'bisq') {
+  routes = [{
+    path: '',
+    loadChildren: () => import('./bisq/bisq.module').then(m => m.BisqModule)
+  }];
+}
+
+if (browserWindowEnv && browserWindowEnv.BASE_MODULE === 'liquid') {
+  routes = [
+    {
+      path: 'testnet',
+      children: [
+        {
+          path: '',
+          pathMatch: 'full',
+          loadChildren: () => import('./liquid/liquid-graphs.module').then(m => m.LiquidGraphsModule),
+          data: { preload: true },
+        },
+        {
+          path: '',
+          loadChildren: () => import ('./liquid/liquid-master-page.module').then(m => m.LiquidMasterPageModule),
+          data: { preload: true },
+        },
+        {
+          path: 'wallet',
+          children: [],
+          component: AddressGroupComponent,
+          data: {
+            networkSpecific: true,
+          }
+        },
+        {
+          path: 'status',
+          data: { networks: ['bitcoin', 'liquid'] },
+          component: StatusViewComponent
+        },
+        {
+          path: '',
+          loadChildren: () => import('./liquid/liquid-graphs.module').then(m => m.LiquidGraphsModule),
+          data: { preload: true },
+        },
+        {
+          path: '**',
+          redirectTo: '/signet'
+        },
+      ]
+    },
+    {
+      path: '',
+      pathMatch: 'full',
+      loadChildren: () => import('./liquid/liquid-graphs.module').then(m => m.LiquidGraphsModule),
+      data: { preload: true },
+    },
+    {
+      path: '',
+      loadChildren: () => import ('./liquid/liquid-master-page.module').then(m => m.LiquidMasterPageModule),
+      data: { preload: true },
+    },
+    {
+      path: 'wallet',
+      children: [],
+      component: AddressGroupComponent,
+      data: {
+        networkSpecific: true,
+      }
+    },
+    {
+      path: 'preview',
+      children: [
+        {
+          path: '',
+          loadChildren: () => import('./previews.module').then(m => m.PreviewsModule)
+        },
+        {
+          path: 'testnet',
+          loadChildren: () => import('./previews.module').then(m => m.PreviewsModule)
+        },
+      ],
+    },
+    {
+      path: 'status',
+      data: { networks: ['bitcoin', 'liquid']},
+      component: StatusViewComponent
+    },
+    {
+      path: '',
+      loadChildren: () => import('./liquid/liquid-graphs.module').then(m => m.LiquidGraphsModule),
+      data: { preload: true },
+    },
+    {
+      path: '**',
+      redirectTo: ''
+    },
+  ];
+}
+
 @NgModule({
-  imports: [RouterModule.forRoot(routes)],
-  exports: [RouterModule]
+  imports: [RouterModule.forRoot(routes, {
+    initialNavigation: 'enabledBlocking',
+    scrollPositionRestoration: 'enabled',
+    anchorScrolling: 'enabled',
+    preloadingStrategy: AppPreloadingStrategy
+  })],
 })
 export class AppRoutingModule { }

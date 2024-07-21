@@ -4,6 +4,15 @@
 /dist
 /tmp
 /out-tsc
+server.run.js
+
+# docker
+Dockerfile
+entrypoint.sh
+nginx-mempool.conf
+nginx.conf
+wait-for
+
 # Only exists if Bazel was run
 /bazel-out
 
@@ -32,6 +41,7 @@ speed-measure-plugin.json
 .history/*
 
 # misc
+/.angular/cache
 /.sass-cache
 /connect.lock
 /coverage
@@ -47,8 +57,21 @@ Thumbs.db
 
 src/resources/assets.json
 src/resources/assets.minimal.json
+src/resources/assets-testnet.json
+src/resources/assets-testnet.minimal.json
 src/resources/pools.json
+src/resources/mining-pools/*
+src/resources/**/*.mp4
+src/resources/**/*.vtt
 
 # environment config
 mempool-frontend-config.json
 generated-config.js
+
+# e2e results
+cypress/videos
+cypress/screenshots
+
+# Base index
+src/index.html
+

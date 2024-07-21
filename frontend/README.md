@@ -1,27 +1,137 @@
-# Mempool Space
+# Mempool Frontend
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 8.1.2.
+You can build and run the Mempool frontend and proxy to the production Mempool backend (for easier frontend development), or you can connect it to your own backend for a full Mempool development instance, custom deployment, etc.
 
-## Development server
+Jump to a section in this doc:
+- [Quick Setup for Frontend Development](#quick-setup-for-frontend-development)
+- [Manual Frontend Setup](#manual-setup)
+- [Translations](#translations-transifex-project)
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The app will automatically reload if you change any of the source files.
+## Quick Setup for Frontend Development
 
-## Code scaffolding
+If you want to quickly improve the UI, fix typos, or make other updates that don't require any backend changes, you don't need to set up an entire backend—you can simply run the Mempool frontend locally and proxy to the mempool.space backend.
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+### 1. Clone Mempool Repository
 
-## Build
+Get the latest Mempool code:
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory. Use the `--prod` flag for a production build.
+```
+git clone https://github.com/mempool/mempool
+cd mempool/frontend
+```
 
-## Running unit tests
+### 2. Specify Website
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+The same frontend codebase is used for https://mempool.space, https://liquid.network and https://bisq.markets.
 
-## Running end-to-end tests
+Configure the frontend for the site you want by running the corresponding command:
 
-Run `ng e2e` to execute the end-to-end tests via [Protractor](http://www.protractortest.org/).
+```
+$ npm run config:defaults:mempool
+$ npm run config:defaults:liquid
+$ npm run config:defaults:bisq
+```
 
-## Further help
+### 3. Run the Frontend
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI README](https://github.com/angular/angular-cli/blob/master/README.md).
+_Make sure to use Node.js 16.10 and npm 7._
+
+Install project dependencies and run the frontend server:
+
+```
+$ npm install
+$ npm run serve:local-prod
+```
+
+The frontend will be available at http://localhost:4200/ and all API requests will be proxied to the production server at https://mempool.space.
+
+### 4. Test
+
+After making your changes, you can run our end-to-end automation suite and check for possible regressions.
+
+Headless:
+
+```
+$ npm run config:defaults:mempool && npm run cypress:run
+```
+
+Interactive:
+
+```
+$ npm run config:defaults:mempool && npm run cypress:open
+```
+
+This will open the Cypress test runner, where you can select any of the test files to run.
+
+If all tests are green, submit your PR, and it will be reviewed by someone on the team as soon as possible.
+
+## Manual Setup
+
+Set up the [Mempool backend](../backend/) first, if you haven't already.
+
+### 1. Build the Frontend
+
+_Make sure to use Node.js 16.10 and npm 7._
+
+Build the frontend:
+
+```
+cd frontend
+npm install
+npm run build
+```
+
+### 2. Run the Frontend
+
+#### Development
+
+To run your local Mempool frontend with your local Mempool backend:
+
+```
+npm run serve
+```
+
+#### Production
+
+The `npm run build` command from step 1 above should have generated a `dist` directory. Put the contents of `dist/` onto your web server.
+
+You will probably want to set up a reverse proxy, TLS, etc. There are sample nginx configuration files in the top level of the repository for reference, but note that support for such tasks is outside the scope of this project.
+
+## Translations: Transifex Project
+
+The Mempool frontend strings are localized into 20+ locales:
+https://www.transifex.com/mempool/mempool/dashboard/
+
+### Translators
+
+* Arabic @baro0k
+* Czech @pixelmade2
+* Danish @pierrevendelboe
+* German @Emzy
+* English (default)
+* Spanish @maxhodler @bisqes
+* Persian @techmix
+* French @Bayernatoor
+* Korean @kcalvinalvinn @sogoagain
+* Italian @HodlBits
+* Lithuanian @eimze21
+* Hebrew @rapidlab309
+* Georgian @wyd_idk
+* Hungarian @btcdragonlord
+* Dutch @m__btc
+* Japanese @wiz @japananon
+* Norwegian @T82771355
+* Polish @maciejsoltysiak
+* Portugese @jgcastro1985
+* Slovenian @thepkbadger
+* Finnish @bio_bitcoin
+* Swedish @softsimon_
+* Thai @Gusb3ll
+* Turkish @stackmore
+* Ukrainian @volbil
+* Vietnamese @BitcoinvnNews
+* Chinese @wdljt
+* Russian @TonyCrusoe @Bitconan
+* Romanian @mirceavesa
+* Macedonian @SkechBoy
+* Nepalese @kebinm

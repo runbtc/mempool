@@ -1,70 +1,313 @@
-import { Component, OnInit, ChangeDetectionStrategy, EventEmitter, Output } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
-import { AssetsService } from 'src/app/services/assets.service';
-import { StateService } from 'src/app/services/state.service';
+import { Component, OnInit, ChangeDetectionStrategy, EventEmitter, Output, ViewChild, HostListener, ElementRef, Input } from '@angular/core';
+import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
+import { EventType, NavigationStart, Router } from '@angular/router';
+import { AssetsService } from '../../services/assets.service';
+import { Env, StateService } from '../../services/state.service';
+import { Observable, of, Subject, zip, BehaviorSubject, combineLatest } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap, catchError, map, startWith,  tap } from 'rxjs/operators';
+import { ElectrsApiService } from '../../services/electrs-api.service';
+import { RelativeUrlPipe } from '../../shared/pipes/relative-url/relative-url.pipe';
+import { ApiService } from '../../services/api.service';
+import { SearchResultsComponent } from './search-results/search-results.component';
+import { Network, findOtherNetworks, getRegex, getTargetUrl, needBaseModuleChange } from '../../shared/regex.utils';
 
 @Component({
   selector: 'app-search-form',
   templateUrl: './search-form.component.html',
   styleUrls: ['./search-form.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SearchFormComponent implements OnInit {
+  @Input() hamburgerOpen = false;
+  env: Env;
   network = '';
   assets: object = {};
+  isSearching = false;
+  isTypeaheading$ = new BehaviorSubject<boolean>(false);
+  typeAhead$: Observable<any>;
+  searchForm: UntypedFormGroup;
+  dropdownHidden = false;
 
-  searchForm: FormGroup;
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event) {
+    if (this.elementRef.nativeElement.contains(event.target)) {
+      this.dropdownHidden = false;
+    } else {
+      this.dropdownHidden = true;
+    }
+  }
+
+  regexAddress = getRegex('address', 'mainnet'); // Default to mainnet
+  regexBlockhash = getRegex('blockhash', 'mainnet');
+  regexTransaction = getRegex('transaction');
+  regexBlockheight = getRegex('blockheight');
+  regexDate = getRegex('date');
+  regexUnixTimestamp = getRegex('timestamp');
+
+  focus$ = new Subject<string>();
+  click$ = new Subject<string>();
+
   @Output() searchTriggered = new EventEmitter();
+  @ViewChild('searchResults') searchResults: SearchResultsComponent;
+  @HostListener('keydown', ['$event']) keydown($event): void {
+    this.handleKeyDown($event);
+  }
 
-  regexAddress = /^([a-km-zA-HJ-NP-Z1-9]{26,35}|[a-km-zA-HJ-NP-Z1-9]{80}|[a-z]{2,5}1[ac-hj-np-z02-9]{8,87})$/;
-  regexBlockhash = /^[0]{8}[a-fA-F0-9]{56}$/;
-  regexTransaction = /^[a-fA-F0-9]{64}$/;
-  regexBlockheight = /^[0-9]+$/;
+  @ViewChild('searchInput') searchInput: ElementRef;
 
   constructor(
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
     private router: Router,
     private assetsService: AssetsService,
     private stateService: StateService,
-  ) { }
+    private electrsApiService: ElectrsApiService,
+    private apiService: ApiService,
+    private relativeUrlPipe: RelativeUrlPipe,
+    private elementRef: ElementRef
+  ) {
+  }
 
-  ngOnInit() {
-    this.stateService.networkChanged$.subscribe((network) => this.network = network);
+  ngOnInit(): void {
+    this.env = this.stateService.env;
+    this.stateService.networkChanged$.subscribe((network) => {
+      this.network = network;
+      // TODO: Eventually change network type here from string to enum of consts
+      this.regexAddress = getRegex('address', network as any || 'mainnet');
+      this.regexBlockhash = getRegex('blockhash', network as any || 'mainnet');
+    });
+
+    this.router.events.subscribe((e: NavigationStart) => { // Reset search focus when changing page
+      if (this.searchInput && e.type === EventType.NavigationStart) {
+        this.searchInput.nativeElement.blur();
+      }
+    });
+
+    this.stateService.searchFocus$.subscribe(() => {
+      if (!this.searchInput) { // Try again a bit later once the view is properly initialized
+        setTimeout(() => this.searchInput.nativeElement.focus(), 100);
+      } else if (this.searchInput) {
+        this.searchInput.nativeElement.focus();
+      }
+    });
 
     this.searchForm = this.formBuilder.group({
       searchText: ['', Validators.required],
     });
-    if (this.network === 'liquid') {
+
+    if (this.network === 'liquid' || this.network === 'liquidtestnet') {
       this.assetsService.getAssetsMinimalJson$
         .subscribe((assets) => {
           this.assets = assets;
         });
     }
+
+    const searchText$ = this.searchForm.get('searchText').valueChanges
+    .pipe(
+      map((text) => {
+        return text.trim();
+      }),
+      tap((text) => {
+        this.stateService.searchText$.next(text);
+      }),
+      distinctUntilChanged(),
+    );
+
+    const searchResults$ = searchText$.pipe(
+      debounceTime(200),
+      switchMap((text) => {
+        if (!text.length) {
+          return of([
+            [],
+            { nodes: [], channels: [] }
+          ]);
+        }
+        this.isTypeaheading$.next(true);
+        if (!this.stateService.env.LIGHTNING) {
+          return zip(
+            this.electrsApiService.getAddressesByPrefix$(text).pipe(catchError(() => of([]))),
+            [{ nodes: [], channels: [] }],
+          );
+        }
+        return zip(
+          this.electrsApiService.getAddressesByPrefix$(text).pipe(catchError(() => of([]))),
+          this.apiService.lightningSearch$(text).pipe(catchError(() => of({
+            nodes: [],
+            channels: [],
+          }))),
+        );
+      }),
+      map((result: any[]) => {
+        return result;
+      }),
+      tap(() => {
+        this.isTypeaheading$.next(false);
+      })
+    );
+
+    this.typeAhead$ = combineLatest(
+      [
+        searchText$,
+        searchResults$.pipe(
+        startWith([
+          [],
+          {
+            nodes: [],
+            channels: [],
+          }
+        ]))
+      ]
+      ).pipe(
+        map((latestData) => {
+          let searchText = latestData[0];
+          if (!searchText.length) {
+            return {
+              searchText: '',
+              hashQuickMatch: false,
+              blockHeight: false,
+              txId: false,
+              address: false,
+              otherNetworks: [],
+              addresses: [],
+              nodes: [],
+              channels: [],
+              liquidAsset: [],
+            };
+          }
+
+          const result = latestData[1];
+          const addressPrefixSearchResults = result[0];
+          const lightningResults = result[1];
+
+          // Do not show date and timestamp results for liquid and bisq
+          const isNetworkBitcoin = this.network === '' || this.network === 'testnet' || this.network === 'signet';
+
+          const matchesBlockHeight = this.regexBlockheight.test(searchText) && parseInt(searchText) <= this.stateService.latestBlockHeight;
+          const matchesDateTime = this.regexDate.test(searchText) && new Date(searchText).toString() !== 'Invalid Date' && new Date(searchText).getTime() <= Date.now() && isNetworkBitcoin;
+          const matchesUnixTimestamp = this.regexUnixTimestamp.test(searchText) && parseInt(searchText) <= Math.floor(Date.now() / 1000) && isNetworkBitcoin;
+          const matchesTxId = this.regexTransaction.test(searchText) && !this.regexBlockhash.test(searchText);
+          const matchesBlockHash = this.regexBlockhash.test(searchText);
+          let matchesAddress = !matchesTxId && this.regexAddress.test(searchText);
+          const otherNetworks = findOtherNetworks(searchText, this.network as any || 'mainnet', this.env);
+          const liquidAsset = this.assets ? (this.assets[searchText] || []) : [];
+
+          // Add B prefix to addresses in Bisq network
+          if (!matchesAddress && this.network === 'bisq' && getRegex('address', 'mainnet').test(searchText)) {
+              searchText = 'B' + searchText;
+              matchesAddress = !matchesTxId && this.regexAddress.test(searchText);
+          }
+
+          if (matchesDateTime && searchText.indexOf('/') !== -1) {
+            searchText = searchText.replace(/\//g, '-');
+          }
+
+          return {
+            searchText: searchText,
+            hashQuickMatch: +(matchesBlockHeight || matchesBlockHash || matchesTxId || matchesAddress || matchesUnixTimestamp || matchesDateTime),
+            blockHeight: matchesBlockHeight,
+            dateTime: matchesDateTime,
+            unixTimestamp: matchesUnixTimestamp,
+            txId: matchesTxId,
+            blockHash: matchesBlockHash,
+            address: matchesAddress,
+            addresses: matchesAddress && addressPrefixSearchResults.length === 1 && searchText === addressPrefixSearchResults[0] ? [] : addressPrefixSearchResults, // If there is only one address and it matches the search text, don't show it in the dropdown
+            otherNetworks: otherNetworks,
+            nodes: lightningResults.nodes,
+            channels: lightningResults.channels,
+            liquidAsset: liquidAsset,
+          };
+        })
+      );
   }
 
-  search() {
-    const searchText = this.searchForm.value.searchText.trim();
-    if (searchText) {
-      if (this.regexAddress.test(searchText)) {
-        this.router.navigate([(this.network ? '/' + this.network : '') + '/address/', searchText]);
-        this.searchTriggered.emit();
-      } else if (this.regexBlockhash.test(searchText) || this.regexBlockheight.test(searchText)) {
-        this.router.navigate([(this.network ? '/' + this.network : '') + '/block/', searchText]);
-        this.searchTriggered.emit();
-      } else if (this.regexTransaction.test(searchText)) {
-        if (this.network === 'liquid' && this.assets[searchText]) {
-          this.router.navigate([(this.network ? '/' + this.network : '') + '/asset/', searchText]);
-        } else {
-          this.router.navigate([(this.network ? '/' + this.network : '') + '/tx/', searchText]);
-        }
-        this.searchTriggered.emit();
+  handleKeyDown($event): void {
+    this.searchResults.handleKeyDown($event);
+  }
+
+  itemSelected(): void {
+    setTimeout(() => this.search());
+  }
+
+  selectedResult(result: any): void {
+    if (typeof result === 'string') {
+      this.search(result);
+    } else if (typeof result === 'number' && result <= this.stateService.latestBlockHeight) {
+      this.navigate('/block/', result.toString());
+    } else if (result.alias) {
+      this.navigate('/lightning/node/', result.public_key);
+    } else if (result.short_id) {
+      this.navigate('/lightning/channel/', result.id);
+    } else if (result.network) {
+      if (result.isNetworkAvailable) {
+        this.navigate('/address/', result.address, undefined, result.network);
       } else {
-        return;
+        this.searchForm.setValue({
+          searchText: '',
+        });
+        this.isSearching = false;
       }
+    }
+  }
+
+  search(result?: string): void {
+    const searchText = result || this.searchForm.value.searchText.trim();
+    if (searchText) {
+      this.isSearching = true;
+
+      if (!this.regexTransaction.test(searchText) && this.regexAddress.test(searchText)) {
+        this.navigate('/address/', searchText);
+      } else if (this.regexBlockhash.test(searchText)) {
+        this.navigate('/block/', searchText);
+      } else if (this.regexBlockheight.test(searchText)) {
+        parseInt(searchText) <= this.stateService.latestBlockHeight ? this.navigate('/block/', searchText) : this.isSearching = false;
+      } else if (this.regexTransaction.test(searchText)) {
+        const matches = this.regexTransaction.exec(searchText);
+        if (this.network === 'liquid' || this.network === 'liquidtestnet') {
+          if (this.assets[matches[0]]) {
+            this.navigate('/assets/asset/', matches[0]);
+          }
+          this.electrsApiService.getAsset$(matches[0])
+            .subscribe(
+              () => { this.navigate('/assets/asset/', matches[0]); },
+              () => {
+                this.electrsApiService.getBlock$(matches[0])
+                  .subscribe(
+                    (block) => { this.navigate('/block/', matches[0], { state: { data: { block } } }); },
+                    () => { this.navigate('/tx/', matches[0]); });
+              }
+            );
+        } else {
+          this.navigate('/tx/', matches[0]);
+        }
+      } else if (this.regexDate.test(searchText) || this.regexUnixTimestamp.test(searchText)) {
+        let timestamp: number;
+        this.regexDate.test(searchText) ? timestamp = Math.floor(new Date(searchText).getTime() / 1000) : timestamp = searchText;
+        // Check if timestamp is too far in the future or before the genesis block
+        if (timestamp > Math.floor(Date.now() / 1000)) {
+          this.isSearching = false;
+          return;
+        }
+        this.apiService.getBlockDataFromTimestamp$(timestamp).subscribe(
+          (data) => { this.navigate('/block/', data.hash); },
+          (error) => { console.log(error); this.isSearching = false; }
+        );
+      } else {
+        this.searchResults.searchButtonClick();
+        this.isSearching = false;
+      }
+    }
+  }
+
+
+  navigate(url: string, searchText: string, extras?: any, swapNetwork?: string) {
+    if (needBaseModuleChange(this.env.BASE_MODULE as 'liquid' | 'bisq' | 'mempool', swapNetwork as Network)) {
+      window.location.href = getTargetUrl(swapNetwork as Network, searchText, this.env);
+    } else {
+      this.router.navigate([this.relativeUrlPipe.transform(url, swapNetwork), searchText], extras);
+      this.searchTriggered.emit();
       this.searchForm.setValue({
         searchText: '',
       });
+      this.isSearching = false;
     }
   }
 }

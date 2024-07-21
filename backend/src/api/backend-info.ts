@@ -1,28 +1,39 @@
-import * as fs from 'fs';
-import * as os from 'os';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { IBackendInfo } from '../mempool.interfaces';
+import config from '../config';
 
 class BackendInfo {
-  gitCommitHash = '';
-  hostname = '';
+  private backendInfo: IBackendInfo;
 
   constructor() {
-    this.setLatestCommitHash();
-    this.hostname = os.hostname();
-  }
-
-  public getBackendInfo() {
-    return {
-      'hostname': this.hostname,
-      'git-commit': this.gitCommitHash,
+    // This file is created by ./fetch-version.ts during building
+    const versionFile = path.join(__dirname, 'version.json')
+    var versionInfo;
+    if (fs.existsSync(versionFile)) {
+      versionInfo = JSON.parse(fs.readFileSync(versionFile).toString());
+    } else {
+      // Use dummy values if `versionFile` doesn't exist (e.g., during testing)
+      versionInfo = {
+        version: '?',
+        gitCommit: '?'
+      };
+    }
+    this.backendInfo = {
+      hostname: os.hostname(),
+      version: versionInfo.version,
+      gitCommit: versionInfo.gitCommit,
+      lightning: config.LIGHTNING.ENABLED
     };
   }
 
-  private setLatestCommitHash(): void {
-    try {
-      this.gitCommitHash = fs.readFileSync('../.git/refs/heads/master').toString().trim();
-    } catch (e) {
-      console.log('Could not load git commit info, skipping.');
-    }
+  public getBackendInfo(): IBackendInfo {
+    return this.backendInfo;
+  }
+
+  public getShortCommitHash() {
+    return this.backendInfo.gitCommit.slice(0, 7);
   }
 }
 

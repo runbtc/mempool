@@ -2,24 +2,38 @@ import { Injectable } from '@angular/core';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
 import { WebsocketResponse } from '../interfaces/websocket.interface';
 import { StateService } from './state.service';
-import { Block, Transaction } from '../interfaces/electrs.interface';
-import { Subscription } from 'rxjs';
+import { Transaction } from '../interfaces/electrs.interface';
+import { firstValueFrom, Subscription } from 'rxjs';
+import { ApiService } from './api.service';
+import { take } from 'rxjs/operators';
+import { TransferState, makeStateKey } from '@angular/core';
+import { CacheService } from './cache.service';
+import { uncompressDeltaChange, uncompressTx } from '../shared/common.utils';
 
-const WEB_SOCKET_PROTOCOL = (document.location.protocol === 'https:') ? 'wss:' : 'ws:';
-const WEB_SOCKET_URL = WEB_SOCKET_PROTOCOL + '//' + document.location.hostname + ':' + document.location.port + '{network}/api/v1/ws';
-
-const OFFLINE_RETRY_AFTER_MS = 10000;
+const OFFLINE_RETRY_AFTER_MS = 2000;
 const OFFLINE_PING_CHECK_AFTER_MS = 30000;
-const EXPECT_PING_RESPONSE_AFTER_MS = 1000;
+const EXPECT_PING_RESPONSE_AFTER_MS = 5000;
+
+const initData = makeStateKey('/api/v1/init-data');
 
 @Injectable({
   providedIn: 'root'
 })
 export class WebsocketService {
+  private webSocketProtocol = (document.location.protocol === 'https:') ? 'wss:' : 'ws:';
+  private webSocketUrl = this.webSocketProtocol + '//' + document.location.hostname + ':' + document.location.port + '{network}/api/v1/ws';
+
   private websocketSubject: WebSocketSubject<WebsocketResponse>;
   private goneOffline = false;
-  private lastWant: string[] | null = null;
+  private lastWant: string | null = null;
   private isTrackingTx = false;
+  private trackingTxId: string;
+  private isTrackingMempoolBlock = false;
+  private isTrackingRbf: 'all' | 'fullRbf' | false = false;
+  private isTrackingRbfSummary = false;
+  private isTrackingAddress: string | false = false;
+  private isTrackingAddresses: string[] | false = false;
+  private trackingMempoolBlock: number;
   private latestGitCommit = '';
   private onlineCheckTimeout: number;
   private onlineCheckTimeoutTwo: number;
@@ -28,125 +42,102 @@ export class WebsocketService {
 
   constructor(
     private stateService: StateService,
+    private apiService: ApiService,
+    private transferState: TransferState,
+    private cacheService: CacheService,
   ) {
-    this.network = this.stateService.network === 'bisq' ? '' : this.stateService.network;
-    this.websocketSubject = webSocket<WebsocketResponse>(WEB_SOCKET_URL.replace('{network}', this.network ? '/' + this.network : ''));
-    this.startSubscription();
+    if (!this.stateService.isBrowser) {
+      // @ts-ignore
+      this.websocketSubject = { next: () => {}};
+      this.stateService.isLoadingWebSocket$.next(false);
+      this.apiService.getInitData$()
+        .pipe(take(1))
+        .subscribe((response) => this.handleResponse(response));
+    } else {
+      this.network = this.stateService.network === 'bisq' && !this.stateService.env.BISQ_SEPARATE_BACKEND ? '' : this.stateService.network;
+      this.websocketSubject = webSocket<WebsocketResponse>(this.webSocketUrl.replace('{network}', this.network ? '/' + this.network : ''));
 
-    this.stateService.networkChanged$.subscribe((network) => {
-      if (network === 'bisq') {
-        network = '';
+      const { response: theInitData } = this.transferState.get<any>(initData, null) || {};
+      if (theInitData) {
+        if (theInitData.body.blocks) {
+          theInitData.body.blocks = theInitData.body.blocks.reverse();
+        }
+        this.stateService.isLoadingWebSocket$.next(false);
+        this.handleResponse(theInitData.body);
+        this.startSubscription(false, true);
+      } else {
+        this.startSubscription();
       }
-      if (network === this.network) {
-        return;
-      }
-      this.network = network;
-      clearTimeout(this.onlineCheckTimeout);
-      clearTimeout(this.onlineCheckTimeoutTwo);
 
-      this.stateService.latestBlockHeight = 0;
+      this.stateService.networkChanged$.subscribe((network) => {
+        if (network === 'bisq' && !this.stateService.env.BISQ_SEPARATE_BACKEND) {
+          network = '';
+        }
+        if (network === this.network) {
+          return;
+        }
+        this.network = network;
+        clearTimeout(this.onlineCheckTimeout);
+        clearTimeout(this.onlineCheckTimeoutTwo);
 
-      this.websocketSubject.complete();
-      this.subscription.unsubscribe();
-      this.websocketSubject = webSocket<WebsocketResponse>(WEB_SOCKET_URL.replace('{network}', this.network ? '/' + this.network : ''));
+        this.stateService.resetChainTip();
 
-      this.startSubscription();
-    });
-
+        this.reconnectWebsocket();
+      });
+    }
   }
 
-  startSubscription(retrying = false) {
+  reconnectWebsocket(retrying = false, hasInitData = false) {
+    console.log('reconnecting websocket');
+    this.websocketSubject.complete();
+    this.subscription.unsubscribe();
+    this.websocketSubject = webSocket<WebsocketResponse>(
+      this.webSocketUrl.replace('{network}', this.network ? '/' + this.network : '')
+    );
+
+    this.startSubscription(retrying, hasInitData);
+  }
+
+  startSubscription(retrying = false, hasInitData = false) {
+    if (!hasInitData) {
+      this.stateService.isLoadingWebSocket$.next(true);
+      this.websocketSubject.next({'action': 'init'});
+    }
     if (retrying) {
       this.stateService.connectionState$.next(1);
     }
-    this.websocketSubject.next({'action': 'init'});
     this.subscription = this.websocketSubject
       .subscribe((response: WebsocketResponse) => {
-        if (response.blocks && response.blocks.length) {
-          const blocks = response.blocks;
-          blocks.forEach((block: Block) => {
-            if (block.height > this.stateService.latestBlockHeight) {
-              this.stateService.latestBlockHeight = block.height;
-              this.stateService.blocks$.next([block, false, true]);
-            }
-          });
-        }
-
-        if (response.tx) {
-          this.stateService.mempoolTransactions$.next(response.tx);
-        }
-
-        if (response.block) {
-          if (response.block.height > this.stateService.latestBlockHeight) {
-            this.stateService.latestBlockHeight = response.block.height;
-            this.stateService.blocks$.next([response.block, !!response.txConfirmed, false]);
-          }
-
-          if (response.txConfirmed) {
-            this.isTrackingTx = false;
-          }
-        }
-
-        if (response.conversions) {
-          this.stateService.conversions$.next(response.conversions);
-        }
-
-        if (response.rbfTransaction) {
-          this.stateService.txReplaced$.next(response.rbfTransaction);
-        }
-
-        if (response['mempool-blocks']) {
-          this.stateService.mempoolBlocks$.next(response['mempool-blocks']);
-        }
-
-        if (response['bsq-price']) {
-          this.stateService.bsqPrice$.next(response['bsq-price']);
-        }
-
-        if (response['git-commit']) {
-          if (!this.latestGitCommit) {
-            this.latestGitCommit = response['git-commit'];
-          } else {
-            if (this.latestGitCommit !== response['git-commit']) {
-              setTimeout(() => {
-                window.location.reload();
-              }, Math.floor(Math.random() * 60000) + 60000);
-            }
-          }
-        }
-
-        if (response['address-transactions']) {
-          response['address-transactions'].forEach((addressTransaction: Transaction) => {
-            this.stateService.mempoolTransactions$.next(addressTransaction);
-          });
-        }
-
-        if (response['block-transactions']) {
-          response['block-transactions'].forEach((addressTransaction: Transaction) => {
-            this.stateService.blockTransactions$.next(addressTransaction);
-          });
-        }
-
-        if (response['live-2h-chart']) {
-          this.stateService.live2Chart$.next(response['live-2h-chart']);
-        }
-
-        if (response.mempoolInfo) {
-          this.stateService.mempoolStats$.next({
-            memPoolInfo: response.mempoolInfo,
-            vBytesPerSecond: response.vBytesPerSecond,
-          });
-        }
+        this.stateService.isLoadingWebSocket$.next(false);
+        this.handleResponse(response);
 
         if (this.goneOffline === true) {
           this.goneOffline = false;
           if (this.lastWant) {
-            this.want(this.lastWant);
+            this.want(JSON.parse(this.lastWant), true);
+          }
+          if (this.isTrackingTx) {
+            this.startMultiTrackTransaction(this.trackingTxId);
+          }
+          if (this.isTrackingMempoolBlock) {
+            this.startTrackMempoolBlock(this.trackingMempoolBlock, true);
+          }
+          if (this.isTrackingRbf) {
+            this.startTrackRbf(this.isTrackingRbf);
+          }
+          if (this.isTrackingRbfSummary) {
+            this.startTrackRbfSummary();
+          }
+          if (this.isTrackingAddress) {
+            this.startTrackAddress(this.isTrackingAddress);
+          }
+          if (this.isTrackingAddresses) {
+            this.startTrackAddresses(this.isTrackingAddresses);
           }
           this.stateService.connectionState$.next(2);
         }
 
-        if (this.stateService.connectionState$.value === 1) {
+        if (this.stateService.connectionState$.value !== 2) {
           this.stateService.connectionState$.next(2);
         }
 
@@ -154,7 +145,7 @@ export class WebsocketService {
       },
       (err: Error) => {
         console.log(err);
-        console.log(`WebSocket error, trying to reconnect in ${OFFLINE_RETRY_AFTER_MS} seconds`);
+        console.log(`WebSocket error`);
         this.goOffline();
       });
   }
@@ -165,11 +156,13 @@ export class WebsocketService {
     }
     this.websocketSubject.next({ 'track-tx': txId });
     this.isTrackingTx = true;
+    this.trackingTxId = txId;
   }
 
   startMultiTrackTransaction(txId: string) {
     this.websocketSubject.next({ 'track-tx': txId, 'watch-mempool': true });
     this.isTrackingTx = true;
+    this.trackingTxId = txId;
   }
 
   stopTrackingTransaction() {
@@ -182,10 +175,22 @@ export class WebsocketService {
 
   startTrackAddress(address: string) {
     this.websocketSubject.next({ 'track-address': address });
+    this.isTrackingAddress = address;
   }
 
   stopTrackingAddress() {
     this.websocketSubject.next({ 'track-address': 'stop' });
+    this.isTrackingAddress = false;
+  }
+
+  startTrackAddresses(addresses: string[]) {
+    this.websocketSubject.next({ 'track-addresses': addresses });
+    this.isTrackingAddresses = addresses;
+  }
+
+  stopTrackingAddresses() {
+    this.websocketSubject.next({ 'track-addresses': [] });
+    this.isTrackingAddresses = false;
   }
 
   startTrackAsset(asset: string) {
@@ -196,21 +201,73 @@ export class WebsocketService {
     this.websocketSubject.next({ 'track-asset': 'stop' });
   }
 
+  startTrackMempoolBlock(block: number, force: boolean = false) {
+    // skip duplicate tracking requests
+    if (force || this.trackingMempoolBlock !== block) {
+      this.websocketSubject.next({ 'track-mempool-block': block });
+      this.isTrackingMempoolBlock = true;
+      this.trackingMempoolBlock = block;
+    }
+  }
+
+  stopTrackMempoolBlock() {
+    this.websocketSubject.next({ 'track-mempool-block': -1 });
+    this.isTrackingMempoolBlock = false;
+    this.trackingMempoolBlock = null;
+  }
+
+  startTrackRbf(mode: 'all' | 'fullRbf') {
+    this.websocketSubject.next({ 'track-rbf': mode });
+    this.isTrackingRbf = mode;
+  }
+
+  stopTrackRbf() {
+    this.websocketSubject.next({ 'track-rbf': 'stop' });
+    this.isTrackingRbf = false;
+  }
+
+  startTrackRbfSummary() {
+    this.initRbfSummary();
+    this.websocketSubject.next({ 'track-rbf-summary': true });
+    this.isTrackingRbfSummary = true;
+  }
+
+  stopTrackRbfSummary() {
+    this.websocketSubject.next({ 'track-rbf-summary': false });
+    this.isTrackingRbfSummary = false;
+  }
+
+  startTrackBisqMarket(market: string) {
+    this.websocketSubject.next({ 'track-bisq-market': market });
+  }
+
+  stopTrackingBisqMarket() {
+    this.websocketSubject.next({ 'track-bisq-market': 'stop' });
+  }
+
   fetchStatistics(historicalDate: string) {
     this.websocketSubject.next({ historicalDate });
   }
 
-  want(data: string[]) {
+  want(data: string[], force = false) {
+    if (!this.stateService.isBrowser) {
+      return;
+    }
+    if (JSON.stringify(data) === this.lastWant && !force) {
+      return;
+    }
     this.websocketSubject.next({action: 'want', data: data});
-    this.lastWant = data;
+    this.lastWant = JSON.stringify(data);
   }
 
   goOffline() {
+    const retryDelay = OFFLINE_RETRY_AFTER_MS + (Math.random() * OFFLINE_RETRY_AFTER_MS);
+    console.log(`trying to reconnect websocket in ${retryDelay} seconds`);
     this.goneOffline = true;
     this.stateService.connectionState$.next(0);
     window.setTimeout(() => {
-      this.startSubscription(true);
-    }, OFFLINE_RETRY_AFTER_MS);
+      this.reconnectWebsocket(true);
+    }, retryDelay);
   }
 
   startOnlineCheck() {
@@ -221,12 +278,202 @@ export class WebsocketService {
       this.websocketSubject.next({action: 'ping'});
       this.onlineCheckTimeoutTwo = window.setTimeout(() => {
         if (!this.goneOffline) {
-          console.log('WebSocket response timeout, force closing, trying to reconnect in 10 seconds');
+          console.log('WebSocket response timeout, force closing');
           this.websocketSubject.complete();
           this.subscription.unsubscribe();
           this.goOffline();
         }
       }, EXPECT_PING_RESPONSE_AFTER_MS);
     }, OFFLINE_PING_CHECK_AFTER_MS);
+  }
+
+  handleResponse(response: WebsocketResponse) {
+    let reinitBlocks = false;
+
+    if (response.blocks && response.blocks.length) {
+      const blocks = response.blocks;
+      this.stateService.resetBlocks(blocks);
+      const maxHeight = blocks.reduce((max, block) => Math.max(max, block.height), this.stateService.latestBlockHeight);
+      this.stateService.updateChainTip(maxHeight);
+    }
+
+    if (response.tx) {
+      this.stateService.mempoolTransactions$.next(response.tx);
+    }
+
+    if (response['txPosition']) {
+      this.stateService.mempoolTxPosition$.next(response['txPosition']);
+    }
+
+    if (response.block) {
+      if (response.block.height === this.stateService.latestBlockHeight + 1) {
+        this.stateService.updateChainTip(response.block.height);
+        this.stateService.addBlock(response.block);
+        this.stateService.txConfirmed$.next([response.txConfirmed, response.block]);
+      } else if (response.block.height > this.stateService.latestBlockHeight + 1) {
+        reinitBlocks = true;
+      }
+
+      if (response.txConfirmed) {
+        this.isTrackingTx = false;
+      }
+    }
+
+    if (response.conversions) {
+      this.stateService.conversions$.next(response.conversions);
+    }
+
+    if (response.rbfTransaction) {
+      this.stateService.txReplaced$.next(response.rbfTransaction);
+    }
+
+    if (response.rbfInfo) {
+      this.stateService.txRbfInfo$.next(response.rbfInfo);
+    }
+
+    if (response.rbfLatest) {
+      this.stateService.rbfLatest$.next(response.rbfLatest);
+    }
+
+    if (response.rbfLatestSummary !== undefined) {
+      this.stateService.rbfLatestSummary$.next(response.rbfLatestSummary || []);
+    }
+
+    if (response.txReplaced) {
+      this.stateService.txReplaced$.next(response.txReplaced);
+    }
+
+    if (response['mempool-blocks']) {
+      this.stateService.mempoolBlocks$.next(response['mempool-blocks']);
+    }
+
+    if (response.transactions) {
+      this.stateService.transactions$.next(response.transactions.slice(0, 6));
+    }
+
+    if (response['bsq-price']) {
+      this.stateService.bsqPrice$.next(response['bsq-price']);
+    }
+
+    if (response.utxoSpent) {
+      this.stateService.utxoSpent$.next(response.utxoSpent);
+    }
+
+    if (response.da) {
+      this.stateService.difficultyAdjustment$.next(response.da);
+    }
+
+    if (response.fees) {
+     this.stateService.recommendedFees$.next(response.fees); 
+    }
+
+    if (response.backendInfo) {
+      this.stateService.backendInfo$.next(response.backendInfo);
+
+      if (!this.latestGitCommit) {
+        this.latestGitCommit = response.backendInfo.gitCommit;
+      } else {
+        if (this.latestGitCommit !== response.backendInfo.gitCommit) {
+          setTimeout(() => {
+            window.location.reload();
+          }, Math.floor(Math.random() * 60000) + 60000);
+        }
+      }
+    }
+
+    if (response['address-transactions']) {
+      response['address-transactions'].forEach((addressTransaction: Transaction) => {
+        this.stateService.mempoolTransactions$.next(addressTransaction);
+      });
+    }
+
+    if (response['address-removed-transactions']) {
+      response['address-removed-transactions'].forEach((addressTransaction: Transaction) => {
+        this.stateService.mempoolRemovedTransactions$.next(addressTransaction);
+      });
+    }
+
+    if (response['multi-address-transactions']) {
+      this.stateService.multiAddressTransactions$.next(response['multi-address-transactions']);
+    }
+
+    if (response['block-transactions']) {
+      response['block-transactions'].forEach((addressTransaction: Transaction) => {
+        this.stateService.blockTransactions$.next(addressTransaction);
+      });
+    }
+
+    if (response['projected-block-transactions']) {
+      if (response['projected-block-transactions'].index == this.trackingMempoolBlock) {
+        if (response['projected-block-transactions'].blockTransactions) {
+          this.stateService.mempoolBlockTransactions$.next(response['projected-block-transactions'].blockTransactions.map(uncompressTx));
+        } else if (response['projected-block-transactions'].delta) {
+          this.stateService.mempoolBlockDelta$.next(uncompressDeltaChange(response['projected-block-transactions'].delta));
+        }
+      }
+    }
+
+    if (response['live-2h-chart']) {
+      this.stateService.live2Chart$.next(response['live-2h-chart']);
+    }
+
+    if (response.loadingIndicators) {
+      this.stateService.loadingIndicators$.next(response.loadingIndicators);
+      if (response.loadingIndicators.mempool != null && response.loadingIndicators.mempool < 100) {
+        this.stateService.isLoadingMempool$.next(true);
+      } else {
+        this.stateService.isLoadingMempool$.next(false);
+      }
+    }
+
+    if (response.mempoolInfo) {
+      this.stateService.mempoolInfo$.next(response.mempoolInfo);
+    }
+
+    if (response.vBytesPerSecond !== undefined) {
+      this.stateService.vbytesPerSecond$.next(response.vBytesPerSecond);
+    }
+
+    if (response.previousRetarget !== undefined) {
+      this.stateService.previousRetarget$.next(response.previousRetarget);
+    }
+
+    if (response['tomahawk']) {
+      this.stateService.serverHealth$.next(response['tomahawk']);
+    }
+
+    if (response['git-commit']) {
+      this.stateService.backendInfo$.next(response['git-commit']);
+    }
+
+    if (reinitBlocks) {
+      this.websocketSubject.next({'refresh-blocks': true});
+    }
+  }
+
+  async initRbfSummary(): Promise<void> {
+    if (!this.stateService.isBrowser) {
+      const rbfList = await firstValueFrom(this.apiService.getRbfList$(false));
+      if (rbfList) {
+        const rbfSummary = rbfList.slice(0, 6).map(rbfTree => {
+          let oldFee = 0;
+          let oldVsize = 0;
+          for (const replaced of rbfTree.replaces) {
+            oldFee += replaced.tx.fee;
+            oldVsize += replaced.tx.vsize;
+          }
+          return {
+            txid: rbfTree.tx.txid,
+            mined: !!rbfTree.tx.mined,
+            fullRbf: !!rbfTree.tx.fullRbf,
+            oldFee,
+            oldVsize,
+            newFee: rbfTree.tx.fee,
+            newVsize: rbfTree.tx.vsize,
+          };
+        });
+        this.stateService.rbfLatestSummary$.next(rbfSummary);
+      }
+    }
   }
 }

@@ -1,19 +1,20 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
-import { BisqTransaction } from 'src/app/bisq/bisq.interfaces';
+import { BisqTransaction } from '../../bisq/bisq.interfaces';
 import { switchMap, map, catchError } from 'rxjs/operators';
 import { of, Observable, Subscription } from 'rxjs';
-import { StateService } from 'src/app/services/state.service';
-import { Block, Transaction } from 'src/app/interfaces/electrs.interface';
+import { StateService } from '../../services/state.service';
+import { Block, Transaction } from '../../interfaces/electrs.interface';
 import { BisqApiService } from '../bisq-api.service';
-import { SeoService } from 'src/app/services/seo.service';
-import { ElectrsApiService } from 'src/app/services/electrs-api.service';
+import { SeoService } from '../../services/seo.service';
+import { ElectrsApiService } from '../../services/electrs-api.service';
 import { HttpErrorResponse } from '@angular/common/http';
+import { WebsocketService } from '../../services/websocket.service';
 
 @Component({
   selector: 'app-bisq-transaction',
   templateUrl: './bisq-transaction.component.html',
-  styleUrls: ['./bisq-transaction.component.scss']
+  styleUrls: ['./../../components/transaction/transaction.component.scss']
 })
 export class BisqTransactionComponent implements OnInit, OnDestroy {
   bisqTx: BisqTransaction;
@@ -27,6 +28,7 @@ export class BisqTransactionComponent implements OnInit, OnDestroy {
   subscription: Subscription;
 
   constructor(
+    private websocketService: WebsocketService,
     private route: ActivatedRoute,
     private bisqApiService: BisqApiService,
     private electrsApiService: ElectrsApiService,
@@ -36,6 +38,8 @@ export class BisqTransactionComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit(): void {
+    this.websocketService.want(['blocks']);
+
     this.subscription = this.route.paramMap.pipe(
       switchMap((params: ParamMap) => {
         this.isLoading = true;
@@ -43,7 +47,8 @@ export class BisqTransactionComponent implements OnInit, OnDestroy {
         this.error = null;
         document.body.scrollTo(0, 0);
         this.txId = params.get('id') || '';
-        this.seoService.setTitle('Transaction: ' + this.txId, true);
+        this.seoService.setTitle($localize`:@@bisq.transaction.browser-title:Transaction: ${this.txId}:INTERPOLATION:`);
+        this.seoService.setDescription($localize`:@@meta.description.bisq.transaction:See inputs, outputs, transaction type, burnt amount, and more for transaction with txid ${this.txId}:INTERPOLATION:.`);
         if (history.state.data) {
           return of(history.state.data);
         }
@@ -66,11 +71,13 @@ export class BisqTransactionComponent implements OnInit, OnDestroy {
                     catchError((txError: HttpErrorResponse) => {
                       console.log(txError);
                       this.error = txError;
+                      this.seoService.logSoft404();
                       return of(null);
                     })
                   );
               }
               this.error = bisqTxError;
+              this.seoService.logSoft404();
               return of(null);
             })
           );
@@ -81,7 +88,11 @@ export class BisqTransactionComponent implements OnInit, OnDestroy {
         }
 
         if (tx.version) {
-          this.router.navigate(['/tx/', this.txId], { state: { data: tx, bsqTx: true }});
+          if (this.stateService.env.BASE_MODULE === 'bisq') {
+            window.location.replace('https://mempool.space/tx/' + this.txId);
+          } else {
+            this.router.navigate(['/tx/', this.txId], { state: { data: tx, bsqTx: true }});
+          }
           return of(null);
         }
 
@@ -95,6 +106,7 @@ export class BisqTransactionComponent implements OnInit, OnDestroy {
       this.isLoadingTx = false;
 
       if (!tx) {
+        this.seoService.logSoft404();
         return;
       }
 
@@ -104,7 +116,7 @@ export class BisqTransactionComponent implements OnInit, OnDestroy {
       this.error = error;
     });
 
-    this.latestBlock$ = this.stateService.blocks$.pipe(map((([block]) => block)));
+    this.latestBlock$ = this.stateService.blocks$.pipe(map((blocks) => blocks[0]));
 
     this.stateService.bsqPrice$
       .subscribe((bsqPrice) => {

@@ -3,14 +3,15 @@ import { ActivatedRoute, ParamMap } from '@angular/router';
 import { ElectrsApiService } from '../../services/electrs-api.service';
 import { switchMap, filter, catchError, take } from 'rxjs/operators';
 import { Asset, Transaction } from '../../interfaces/electrs.interface';
-import { WebsocketService } from 'src/app/services/websocket.service';
-import { StateService } from 'src/app/services/state.service';
-import { AudioService } from 'src/app/services/audio.service';
-import { ApiService } from 'src/app/services/api.service';
+import { WebsocketService } from '../../services/websocket.service';
+import { StateService } from '../../services/state.service';
+import { AudioService } from '../../services/audio.service';
+import { ApiService } from '../../services/api.service';
 import { of, merge, Subscription, combineLatest } from 'rxjs';
-import { SeoService } from 'src/app/services/seo.service';
-import { environment } from 'src/environments/environment';
-import { AssetsService } from 'src/app/services/assets.service';
+import { SeoService } from '../../services/seo.service';
+import { environment } from '../../../environments/environment';
+import { AssetsService } from '../../services/assets.service';
+import { moveDec } from '../../bitcoin.utils';
 
 @Component({
   selector: 'app-asset',
@@ -19,9 +20,10 @@ import { AssetsService } from 'src/app/services/assets.service';
 })
 export class AssetComponent implements OnInit, OnDestroy {
   network = '';
-  nativeAssetId = environment.nativeAssetId;
+  nativeAssetId = this.stateService.network === 'liquidtestnet' ? environment.nativeTestAssetId : environment.nativeAssetId;
 
   asset: Asset;
+  blindedIssuance: boolean;
   assetContract: any;
   assetString: string;
   isLoadingAsset = true;
@@ -30,6 +32,7 @@ export class AssetComponent implements OnInit, OnDestroy {
   isNativeAsset = false;
   error: any;
   mainSubscription: Subscription;
+  imageError = false;
 
   totalConfirmedTxCount = 0;
   loadedConfirmedTxCount = 0;
@@ -53,13 +56,14 @@ export class AssetComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit() {
-    this.websocketService.want(['blocks', 'stats', 'mempool-blocks']);
+    this.websocketService.want(['blocks', 'mempool-blocks']);
     this.stateService.networkChanged$.subscribe((network) => this.network = network);
 
     this.mainSubscription = this.route.paramMap
       .pipe(
         switchMap((params: ParamMap) => {
           this.error = undefined;
+          this.imageError = false;
           this.isLoadingAsset = true;
           this.loadedConfirmedTxCount = 0;
           this.asset = null;
@@ -68,7 +72,7 @@ export class AssetComponent implements OnInit, OnDestroy {
           this.transactions = null;
           document.body.scrollTo(0, 0);
           this.assetString = params.get('id') || '';
-          this.seoService.setTitle('Asset: ' + this.assetString, true);
+          this.seoService.setTitle($localize`:@@asset.component.asset-browser-title:Asset: ${this.assetString}:INTERPOLATION:`);
 
           return merge(
             of(true),
@@ -82,6 +86,7 @@ export class AssetComponent implements OnInit, OnDestroy {
                   catchError((err) => {
                     this.isLoadingAsset = false;
                     this.error = err;
+                    this.seoService.logSoft404();
                     console.log(err);
                     return of(null);
                   })
@@ -97,6 +102,10 @@ export class AssetComponent implements OnInit, OnDestroy {
         switchMap(([asset, assetsData]) => {
           this.asset = asset;
           this.assetContract = assetsData[this.asset.asset_id];
+          if (!this.assetContract) {
+            this.assetContract = [null, '?', 'Unknown', 0];
+          }
+          this.blindedIssuance = this.asset.chain_stats.has_blinded_issuances || this.asset.mempool_stats.has_blinded_issuances;
           this.isNativeAsset = asset.asset_id === this.nativeAssetId;
           this.updateChainStats();
           this.websocketService.startTrackAsset(asset.asset_id);
@@ -130,7 +139,13 @@ export class AssetComponent implements OnInit, OnDestroy {
           this.tempTransactions[this.timeTxIndexes[index]].firstSeen = time;
         });
         this.tempTransactions.sort((a, b) => {
-          return b.status.block_time - a.status.block_time || b.firstSeen - a.firstSeen;
+          if (b.status.confirmed) {
+            if (b.status.block_height === a.status.block_height) {
+              return b.status.block_time - a.status.block_time;
+            }
+            return b.status.block_height - a.status.block_height;
+          }
+          return b.firstSeen - a.firstSeen;
         });
 
         this.transactions = this.tempTransactions;
@@ -139,6 +154,7 @@ export class AssetComponent implements OnInit, OnDestroy {
       (error) => {
         console.log(error);
         this.error = error;
+        this.seoService.logSoft404();
         this.isLoadingAsset = false;
       });
 
@@ -187,6 +203,10 @@ export class AssetComponent implements OnInit, OnDestroy {
     // this.sent = this.asset.chain_stats.spent_txo_sum + this.asset.mempool_stats.spent_txo_sum;
     this.txCount = this.asset.chain_stats.tx_count + this.asset.mempool_stats.tx_count;
     this.totalConfirmedTxCount = this.asset.chain_stats.tx_count;
+  }
+
+  formatAmount(value: number, precision = 0): number | string {
+    return moveDec(value, -precision);
   }
 
   ngOnDestroy() {
