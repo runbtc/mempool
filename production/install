@@ -63,7 +63,7 @@ ELEMENTS_ELECTRS_INSTALL=ON
 ELEMENTS_ELECTRS_LIGHT_MODE=ON
 ELEMENTS_ELECTRS_COMPACTION=OFF
 
-# automaitcally configure firewall
+# automatically configure firewall
 FIREWALL_CONFIGURE=ON
 
 ############
@@ -323,7 +323,7 @@ MINFEE_HOME=/minfee
 
 ##### git repo settings, shouldn't need changing
 
-MEMPOOL_REPO_URL=https://github.com/mempool/mempool
+MEMPOOL_REPO_URL=https://github.com/bisq-network/mempool
 MEMPOOL_REPO_NAME=mempool
 MEMPOOL_REPO_BRANCH=master
 MEMPOOL_LATEST_RELEASE=master
@@ -342,10 +342,10 @@ BISQ_REPO_BRANCH=master
 BISQ_LATEST_RELEASE=master
 echo -n '.'
 
-UNFURL_REPO_URL=https://github.com/mempool/mempool
+UNFURL_REPO_URL=https://github.com/bisq-network/mempool
 UNFURL_REPO_NAME=unfurl
 UNFURL_REPO_BRANCH=master
-#UNFURL_LATEST_RELEASE=$(curl -s https://api.github.com/repos/mempool/mempool/releases/latest|grep tag_name|head -1|cut -d '"' -f4)
+#UNFURL_LATEST_RELEASE=$(curl -s https://api.github.com/repos/bisq-network/mempool/releases/latest|grep tag_name|head -1|cut -d '"' -f4)
 UNFURL_LATEST_RELEASE=master
 echo -n '.'
 
