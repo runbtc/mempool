@@ -20,7 +20,7 @@
     "UNIX_SOCKET_PATH": "/bitcoin/socket/esplora-bitcoin-mainnet"
   },
   "DATABASE": {
-    "ENABLED": false,
+    "ENABLED": true,
     "HOST": "127.0.0.1",
     "SOCKET": "__DB_SOCKET__",
     "USERNAME": "__MEMPOOL_BISQ_USER__",
@@ -33,6 +33,6 @@
   },
   "BISQ": {
     "ENABLED": true,
-    "DATA_PATH": "/bisq/statsnode-data/btc_mainnet/db"
+    "DATA_PATH": "/bisq/bisq-statsnode/btc_mainnet/db"
   }
 }
