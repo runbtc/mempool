@@ -1,6 +1,6 @@
 {
   "MEMPOOL": {
-    "OFFICIAL": true,
+    "OFFICIAL": false,
     "ENABLED": false,
     "NETWORK": "testnet",
     "BACKEND": "esplora",

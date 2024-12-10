@@ -1,6 +1,6 @@
 {
   "MEMPOOL": {
-    "OFFICIAL": true,
+    "OFFICIAL": false,
     "NETWORK": "bisq",
     "BACKEND": "esplora",
     "HTTP_PORT": 8996,
