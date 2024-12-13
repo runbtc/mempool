@@ -27,14 +27,14 @@ PROXY_CONFIG = [
         '!/liquidtestnet', '!/liquidtestnet/**', '!/liquidtestnet/',
         '/testnet/api/**', '/signet/api/**'
         ],
-        target: "https://mempool.space",
+        target: "https://mempool.bisq.services",
         ws: true,
         secure: false,
         changeOrigin: true
     },
     {
         context: ['/api/v1/ws'],
-        target: "https://mempool.space",
+        target: "https://mempool.bisq.services",
         ws: true,
         secure: false,
         changeOrigin: true,
@@ -68,7 +68,7 @@ PROXY_CONFIG = [
     },
     {
       context: ['/resources/mining-pools/**'],
-      target: "https://mempool.space",
+      target: "https://mempool.bisq.services",
       secure: false,
       changeOrigin: true
   }
@@ -86,7 +86,7 @@ if (configContent && configContent.BASE_MODULE == "liquid") {
 } else {
     PROXY_CONFIG.push({
         context: ['/resources/assets.json', '/resources/assets.minimal.json', '/resources/worldmap.json'],
-        target: "https://mempool.space",
+        target: "https://mempool.bisq.services",
         secure: false,
         changeOrigin: true,
     });
