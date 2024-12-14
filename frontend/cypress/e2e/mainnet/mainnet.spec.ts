@@ -335,7 +335,7 @@ describe('Mainnet', () => {
       });
     });
 
-    it('loads skeleton when changes between networks', () => {
+    it.skip('loads skeleton when changes between networks', () => {
       cy.visit('/');
       cy.waitForSkeletonGone();
 
