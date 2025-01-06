@@ -34,13 +34,12 @@ class Bisq {
   }
 
   public startBisqService(): void {
-    logger.info('start bisq service (start)');
+    logger.debug('start bisq service');
     this.$pollForNewData();  // obtains the current block height
-    logger.info('start bisq service (end)');
   }
 
   public async $getTransaction(txId: string): Promise<BisqTransaction | undefined> {
-    logger.info("getTransaction called from frontend");
+    logger.debug("getTransaction called from frontend");
     if (!this.isBisqConnected()) return undefined;
     var queriedTx = await this.$lookupBsqTx(txId);
     if (queriedTx !== undefined) {
@@ -50,7 +49,7 @@ class Bisq {
   }
 
   public async $getTransactions(start: number, length: number, types: string[]): Promise<[BisqTransaction[], number]> {
-    logger.info("getTransactions called from frontend");
+    logger.debug("getTransactions called from frontend");
     if (!this.isBisqConnected()) return [[], 0];
     var types2 = types.join("~")
     if (types2.length === 0) { types2 = "~"; }
@@ -59,7 +58,7 @@ class Bisq {
   }
 
   public async $getBlock(hash: string): Promise<BisqBlock | undefined> {
-    logger.info(`getBlock called from frontend ${hash}`);
+    logger.debug(`getBlock called from frontend ${hash}`);
     var cached = this.blockIndex[hash];
     if (cached) {
         return cached;
@@ -70,24 +69,24 @@ class Bisq {
   }
 
   public async $getAddress(hash: string): Promise<BisqTransaction[]> {
-    logger.info(`getAddress called from frontend ${hash}`);
+    logger.debug(`getAddress called from frontend ${hash}`);
     if (!this.isBisqConnected()) return [];
     var queriedTx: BisqTransaction[] = await this.$lookupBsqTxForAddr(hash);
     return queriedTx;
   }
 
   public getLatestBlockHeight(): number {
-    logger.info(`getLatestBlockHeight called from frontend`);
+    logger.debug(`getLatestBlockHeight called from frontend`);
     return this.stats.height;
   }
 
   public getStats(): BisqStats {
-    logger.info("getStats called from frontend");
+    logger.debug("getStats called from frontend");
     return this.stats;
   }
 
   public async $getBlocks(fromHeight: number, limit: number): Promise<[BisqBlock[], number]> {
-    logger.info(`getBlocks called from frontend ${fromHeight} ${limit}`);
+    logger.debug(`getBlocks called from frontend ${fromHeight} ${limit}`);
     let currentHeight = this.getLatestBlockHeight()-fromHeight;
     if (currentHeight > this.getLatestBlockHeight()) {
       limit -= currentHeight - this.getLatestBlockHeight();
@@ -208,39 +207,48 @@ class Bisq {
 
   private async $lookupBsqTx(txId: string) : Promise<BisqTransaction | undefined> {
     const customPromise = this.makeApiCall('transactions/get-bsq-tx', [txId]);
-    var buffer = await customPromise;
     try {
+      let buffer = await customPromise;
       const tx: BisqTransaction = JSON.parse(buffer)
       return tx;
-      } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
+    } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
     return undefined;
   }
 
   private async $lookupBsqTx2(start: number, limit: number, types: string) : Promise<BisqTransaction[]> {
     const customPromise = this.makeApiCall('transactions/query-txs-paginated', [String(start), String(limit), types]);
-    var buffer = await customPromise;
-    const txs: BisqTransaction[] = JSON.parse(buffer)
-    return txs;
+    try {
+      let buffer = await customPromise;
+      const txs: BisqTransaction[] = JSON.parse(buffer)
+      return txs;
+    } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
+    return [];
   }
 
   private async $lookupBsqTxForAddr(addr: string) : Promise<BisqTransaction[]> {
     const customPromise = this.makeApiCall('transactions/get-bsq-tx-for-addr', [addr]);
-    var buffer = await customPromise;
-    const txs: BisqTransaction[] = JSON.parse(buffer)
-    return txs;
+    try {
+      let buffer = await customPromise;
+      const txs: BisqTransaction[] = JSON.parse(buffer)
+      return txs;
+    } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
+    return [];
   }
 
   private async $lookupBsqBlockByHeight(height: number) : Promise<BisqBlock> {
     const customPromise = this.makeApiCall('blocks/get-bsq-block-by-height', [String(height)]);
-    var buffer = await customPromise;
-    const block: BisqBlock = JSON.parse(buffer)
-    return block;
+    try {
+      let buffer = await customPromise;
+      const block: BisqBlock = JSON.parse(buffer)
+      return block;
+    } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
+    return {} as BisqBlock;
   }
 
   private async $lookupBsqBlockByHash(hash: string) : Promise<BisqBlock | undefined> {
     const customPromise = this.makeApiCall('blocks/get-bsq-block-by-hash', [hash]);
     try {
-      var buffer = await customPromise;
+      let buffer = await customPromise;
       const block: BisqBlock = JSON.parse(buffer)
       this.allBlocks.push(block);
       this.allBlocks = this.allBlocks.sort((a,b) => {

@@ -31,11 +31,11 @@ class BisqMarketsApi {
   }
 
   setTradesData(trades: TradesData[]) {
+    const ageForDiscardingStats = 1000*60*60*24*365*2;
     var tradesPre = this.tradesData.length;
     trades.forEach((trade) => {
-      // ignore trade stats older than two years (performance reasons)
-      var oneYear = 1000*60*60*24*365*2;
-        if (trade.tradeDate > new Date().getTime() - oneYear) {
+      // ignore very old trade stats (performance reasons)
+      if (trade.tradeDate > new Date().getTime() - ageForDiscardingStats) {
         trade._market = trade.currencyPair.toLowerCase().replace('/', '_');
         if (!this.tradeDataByMarket[trade._market]) {
           this.tradeDataByMarket[trade._market] = [];
