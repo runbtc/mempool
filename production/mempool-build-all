@@ -34,22 +34,22 @@ echo "Upgrading mempool to ${REF}" | wall
 update_repo()
 {
     local site="$1"
-    echo "[*] Upgrading ${site} to ${REF}"
+    # echo "[*] Upgrading ${site} to ${REF}"
     cd "$HOME/${site}" || exit 1
 
-    git fetch origin || exit 1
-    for remote in origin;do
-        git remote add "${remote}" "https://github.com/${remote}/mempool" >/dev/null 2>&1
-        git fetch "${remote}" || exit 1
-    done
+    # git fetch origin || exit 1
+    # for remote in origin;do
+    #     git remote add "${remote}" "https://github.com/${remote}/mempool" >/dev/null 2>&1
+    #     git fetch "${remote}" || exit 1
+    # done
 
-    if [ $(git tag -l "${REF}") ];then
-        git reset --hard "tags/${REF}" || exit 1
-    elif [ $(git branch -r -l "origin/${REF}") ];then
-        git reset --hard "origin/${REF}" || exit 1
-    else
-        git reset --hard "${REF}" || exit 1
-    fi
+    # if [ $(git tag -l "${REF}") ];then
+    #     git reset --hard "tags/${REF}" || exit 1
+    # elif [ $(git branch -r -l "origin/${REF}") ];then
+    #     git reset --hard "origin/${REF}" || exit 1
+    # else
+    #     git reset --hard "${REF}" || exit 1
+    # fi
     export HASH=$(git rev-parse HEAD)
 }
 
