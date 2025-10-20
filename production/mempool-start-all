@@ -3,8 +3,25 @@ export NVM_DIR="$HOME/.nvm"
 source "$NVM_DIR/nvm.sh"
 nvm use v20.7.0
 
+# what to look for
+frontends=(mainnet liquid bisq)
+backends=(mainnet testnet signet liquid liquidtestnet bisq)
+frontend_repos=()
+backend_repos=()
+
+# find which frontend repos we have
+for repo in $frontends;do
+    [ -d "${repo}" ] && frontend_repos+="${repo}"
+done
+
+# find which backend repos we have
+for repo in $backends;do
+    [ -d "${repo}" ] && backend_repos+="${repo}"
+    [ -d "${repo}-lightning" ] && backend_repos+="${repo}-lightning"
+done
+
 # start all mempool backends that exist
-for site in mainnet mainnet-lightning testnet testnet-lightning signet signet-lightning bisq liquid liquidtestnet;do
+for site in $backends;do
     cd "${HOME}/${site}/backend/" && \
     echo "starting mempool backend: ${site}" && \
     screen -dmS "${site}" sh -c 'while true;do npm run start-production;sleep 1;done'
@@ -15,7 +32,7 @@ screen -dmS x startx
 sleep 3
 
 # start unfurlers for each frontend
-for site in mainnet liquid bisq;do
+for site in $frontends;do
     cd "$HOME/${site}/unfurler" && \
     echo "starting mempool unfurler: ${site}" && \
     screen -dmS "unfurler-${site}" sh -c 'while true;do npm run unfurler;sleep 2;done'
