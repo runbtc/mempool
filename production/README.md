@@ -72,7 +72,6 @@ nvm/elements/liquidv1                777G     11G    765G     1%    /elements/li
 nvm/mempool                          789G     24G    765G     3%    /mempool
 nvm/mysql                            766G    648M    765G     0%    /mysql
 tmpfs                                1.0G    1.3M    1.0G     0%    /var/cache/nginx
-tmpfs                                3.0G    1.9G    1.1G    63%    /bisq/statsnode-data/btc_mainnet/db/json
 ```
 
 ### Build Dependencies

@@ -1,11 +1,8 @@
 import config from '../../config';
 import * as http from 'http';
-import * as https from 'https';
-import { BisqBlocks, BisqBlock, BisqTransaction, BisqStats, BisqTrade } from './interfaces';
-import { Currency, OffersData, TradesData } from './interfaces';
+import { BisqBlock, BisqTransaction, BisqStats } from './interfaces';
 import bisqMarket from './markets-api';
 import pricesUpdater from '../../tasks/price-updater';
-import backendInfo from '../backend-info';
 import logger from '../../logger';
 
 class Bisq {
@@ -27,95 +24,105 @@ class Bisq {
   private lastPollTimestamp: number = 0;
   private pendingQueries: Promise<string>[] = [];
 
-  constructor() {}
+  constructor() { }
 
   setPriceCallbackFunction(fn: (price: number) => void) {
     bisqMarket.setPriceCallbackFunction(fn);
   }
 
   public startBisqService(): void {
-    logger.debug('start bisq service');
-    this.$pollForNewData();  // obtains the current block height
+    logger.info("starting bisq service");
+
+    this.$pollForNewData();
   }
 
   public async $getTransaction(txId: string): Promise<BisqTransaction | undefined> {
-    logger.debug("getTransaction called from frontend");
-    if (!this.isBisqConnected()) return undefined;
+    logger.debug(`getTransaction called from frontend; txId=[${txId}]`);
+
+    if (!this.isBisqAvailable()) return undefined;
+
     var queriedTx = await this.$lookupBsqTx(txId);
     if (queriedTx !== undefined) {
-        this.$fillMissingBlocksFromCache(queriedTx.blockHeight, 1);
+      this.$fillMissingBlocksInCache(queriedTx.blockHeight, 1);
     }
     return queriedTx;
   }
 
   public async $getTransactions(start: number, length: number, types: string[]): Promise<[BisqTransaction[], number]> {
-    logger.debug("getTransactions called from frontend");
-    if (!this.isBisqConnected()) return [[], 0];
-    var types2 = types.join("~")
-    if (types2.length === 0) { types2 = "~"; }
-    var queriedTx = await this.$lookupBsqTx2(start, length, types2);
-    return [queriedTx, this.stats.unspent_txos+this.stats.spent_txos];
+    logger.debug(`getTransactions called from frontend; start=[${start}], length=[${length}], types=[${types}]`);
+
+    if (!this.isBisqAvailable()) return [[], 0];
+
+    var transactions = await this.$lookupBsqTxs(0, 2_147_483_647, types);
+    return [transactions.slice(start, length + start), transactions.length];
   }
 
   public async $getBlock(hash: string): Promise<BisqBlock | undefined> {
-    logger.debug(`getBlock called from frontend ${hash}`);
-    var cached = this.blockIndex[hash];
-    if (cached) {
-        return cached;
+    logger.debug(`getBlock called from frontend; hash=[${hash}]`);
+
+    var cachedBlock = this.blockIndex[hash];
+    if (cachedBlock) {
+      return cachedBlock;
     }
-    if (!this.isBisqConnected()) return undefined;
-    var queried = await this.$lookupBsqBlockByHash(hash);
-    return queried;
+
+    if (!this.isBisqAvailable()) return undefined;
+
+    var queriedBlock = await this.$lookupBsqBlockByHash(hash);
+    return queriedBlock;
   }
 
   public async $getAddress(hash: string): Promise<BisqTransaction[]> {
-    logger.debug(`getAddress called from frontend ${hash}`);
-    if (!this.isBisqConnected()) return [];
+    logger.debug(`getAddress called from frontend; hash=[${hash}]`);
+
+    if (!this.isBisqAvailable()) return [];
+
     var queriedTx: BisqTransaction[] = await this.$lookupBsqTxForAddr(hash);
     return queriedTx;
   }
 
   public getLatestBlockHeight(): number {
     logger.debug(`getLatestBlockHeight called from frontend`);
+
     return this.stats.height;
   }
 
   public getStats(): BisqStats {
     logger.debug("getStats called from frontend");
+
     return this.stats;
   }
 
   public async $getBlocks(fromHeight: number, limit: number): Promise<[BisqBlock[], number]> {
-    logger.debug(`getBlocks called from frontend ${fromHeight} ${limit}`);
-    let currentHeight = this.getLatestBlockHeight()-fromHeight;
-    if (currentHeight > this.getLatestBlockHeight()) {
-      limit -= currentHeight - this.getLatestBlockHeight();
-      currentHeight = this.getLatestBlockHeight();
-    }
-    var returnBlocks: BisqBlock[] = [];
-    if (currentHeight < 0) {
-      return [returnBlocks, this.blocks.length];
-    }
-    returnBlocks = this.getRequiredBlocksFromCache(fromHeight, currentHeight, limit);
-    if (returnBlocks.length === limit) {
-      return [returnBlocks, this.stats.height - this.stats.genesisHeight];
+    logger.debug(`getBlocks called from frontend; fromHeight=[${fromHeight}], limit=[${limit}]`);
+
+    var cachedBlocks: BisqBlock[] = this.getRequiredBlocksFromCache(fromHeight, limit);
+    if (cachedBlocks.length === limit) {
+      return [cachedBlocks, this.stats.height - this.stats.genesisHeight];
     }
 
-    await this.$fillMissingBlocksFromCache(currentHeight, limit);
+    var firstMissingBlockHeight = cachedBlocks.at(-1)?.height === undefined ? fromHeight : cachedBlocks.at(-1)?.height! + 1;
+    var missingBlockCount = limit - cachedBlocks.length;
+
+    await this.$fillMissingBlocksInCache(firstMissingBlockHeight, missingBlockCount);
+
     // now the cache should contain all the results needed
-    returnBlocks = this.getRequiredBlocksFromCache(fromHeight, currentHeight, limit);
-    return [returnBlocks, this.stats.height - this.stats.genesisHeight];
+    cachedBlocks = this.getRequiredBlocksFromCache(fromHeight, limit);
+    if (cachedBlocks.length !== limit) {
+      logger.warn(`still missing blocks after cache fill; cache contains: ${cachedBlocks.length} / ${limit}`);
+    }
+
+    return [cachedBlocks, this.stats.height - this.stats.genesisHeight];
   }
 
   private async $pollForNewData() {
-    this.lookupStats();  // obtains the current block height
+    this.lookupStats();
 
-    if (this.isBisqConnected() && new Date().getTime() - this.lastPollTimestamp > 60000) { // 1 minute
+    if (this.isBisqAvailable() && new Date().getTime() - this.lastPollTimestamp > 60000) {
       this.lastPollTimestamp = new Date().getTime();
       this.pendingQueries.push(this.getCurrencies());
       this.pendingQueries.push(this.getOffers());
       this.pendingQueries.push(this.getTrades());
-      Promise.allSettled(this.pendingQueries).then(results => {
+      Promise.allSettled(this.pendingQueries).then(() => {
         this.pendingQueries.length = 0;
         bisqMarket.updateCache();
       });
@@ -124,66 +131,69 @@ class Bisq {
     setTimeout(() => this.$pollForNewData(), 20000);
   }
 
-  private isBisqConnected() : boolean {
-    if (this.stats.height > 0)
+  private isBisqAvailable(): boolean {
+    if (this.stats.height > 0) {
       return true;
+    }
     logger.warn("bisq not connected!");
     return false;
   }
 
-  private async $fillMissingBlocksFromCache(currentHeight: number, limit: number) {
-    // now we must fill the missing cache elements
-    for (let i = 0; i < limit && currentHeight >= 0; i++) {
-      logger.info(`blocks in cache:${this.blocks.length}, looking for one with height=${currentHeight}`);
-      let block = this.blocks.find((b) => b.height === currentHeight);
-      if (!block) {
-        // find by height, index on the fly, save in database
-        logger.info(`not found in cache, calling lookupBsqBlockByHeight ${currentHeight} ${i}`);
-        const block = await this.$lookupBsqBlockByHeight(currentHeight);
+  private async $fillMissingBlocksInCache(firstMissingBlockHeight: number, count: number) {
+    logger.debug(`fill missing blocks in cache; firstMissingBlockHeight=[${firstMissingBlockHeight}] count=[${count}]`);
+
+    for (let blockHeight = firstMissingBlockHeight; blockHeight < firstMissingBlockHeight + count; blockHeight++) {
+      let block = this.blocks.find((b) => b.height === blockHeight);
+      if (block === undefined) {
+        logger.debug(`blockHeight [${blockHeight}] not found in cache, calling lookupBsqBlockByHeight`);
+        const block = await this.$lookupBsqBlockByHeight(blockHeight);
         this.allBlocks.push(block);
-        this.allBlocks = this.allBlocks.sort((a,b) => {
-          return b['height'] >= a['height'] ? 1 : -1;
-        });
-        this.blocks = this.allBlocks;
       }
-      currentHeight--;
     }
+
+    this.allBlocks = this.allBlocks.sort((a, b) => {
+      return b['height'] >= a['height'] ? 1 : -1;
+    });
+    this.blocks = this.allBlocks;
+
     this.buildIndex();
   }
 
-  private getRequiredBlocksFromCache(index: number, blockHeight: number, count: number) {
-    const returnBlocks: BisqBlock[] = [];
-    logger.info(`cache size:${this.blocks.length}, looking for starting height:${blockHeight} and count:${count}`);
-    while (count > 0) {
+  private getRequiredBlocksFromCache(firstBlockHeight: number, count: number) {
+    logger.debug(`get blocks from cache; firstBlockHeight=[${firstBlockHeight}], count=[${count}]`);
+
+    const cachedBlocks: BisqBlock[] = [];
+    for (let blockHeight = firstBlockHeight; blockHeight < firstBlockHeight + count; blockHeight++) {
       let block = this.blocks.find((b) => b.height === blockHeight);
-      if (block === undefined || block.height !== blockHeight) {
-        logger.debug(`returning incomplete results from cache lookup: ${returnBlocks.length} / ${count} remaining`);
-        return returnBlocks; // cache miss, force caller to index
+      if (block === undefined) {
+        // cache miss, force caller to index
+        logger.debug(`returning incomplete results from cache lookup: ${cachedBlocks.length} / ${count}`);
+        return cachedBlocks;
       } else {
-        returnBlocks.push(block);
-        ++index;
-        --blockHeight;
-        --count;
+        cachedBlocks.push(block);
       }
     }
-    logger.info(`found all ${returnBlocks.length} blocks in cache.`);
-    return returnBlocks;
+
+    logger.debug(`found all ${cachedBlocks.length} blocks in cache`);
+    return cachedBlocks;
   }
 
   private buildIndex() {
-    logger.info("buildIndex");
+    logger.debug("start building index");
+
     this.allBlocks.forEach((block) => {
       if (!this.blockIndex[block.hash]) {
         this.blockIndex[block.hash] = block;
-        logger.info(`set block index for ${block.hash}`);
+        logger.debug(`set block index for block hash [${block.hash}]`);
       }
     });
-    logger.info(`blocks:${this.blocks.length} blockIndex:${Object.keys(this.blockIndex).length}`);
+
+    logger.debug(`finished building index; blocks: ${this.blocks.length}, blockIndex: ${Object.keys(this.blockIndex).length}`);
   }
 
   private lookupStats() {
-    const customPromise = this.makeApiCall('dao/get-bsq-stats');
-    customPromise.then((buffer) => {
+    const apiPromise = this.makeApiCall('dao/get-bsq-stats');
+    apiPromise.then((buffer) => {
       try {
         const stats: BisqStats = JSON.parse(buffer)
         stats.minted /= 100.0;
@@ -192,66 +202,73 @@ class Bisq {
         stats._usdPrice = bisqMarket.bsqPrice * pricesUpdater.getLatestPrices()['USD'];
         stats._marketCap = stats._usdPrice * (stats.minted - stats.burnt);
         this.stats = stats;
-        logger.debug(`stats: BSQ/BTC=${Bisq.FORMAT_BITCOIN(stats._bsqPrice)} BSQ/USD=${Bisq.FORMAT_USD(stats._usdPrice)} MktCap=${Bisq.FORMAT_USD(stats._marketCap)} height=${stats.height}`);
+
+        logger.debug(`stats: BSQ/BTC=${Bisq.FORMAT_BITCOIN(stats._bsqPrice)}, BSQ/USD=${Bisq.FORMAT_USD(stats._usdPrice)}, MktCap=${Bisq.FORMAT_USD(stats._marketCap)}, height=${stats.height}`);
+
         if (this.stats !== undefined && this.blocks.length < 30) {
           // startup, pre-cache first page or so of blocks
-          this.$fillMissingBlocksFromCache(this.stats.height, this.blocks.length + 10);
+          this.$fillMissingBlocksInCache(this.stats.height, this.blocks.length + 10);
         } else if (this.stats !== undefined && this.blocks[0].height !== this.stats.height) {
           // cache a newly issued block
-          this.$fillMissingBlocksFromCache(this.stats.height, 1);
+          this.$fillMissingBlocksInCache(this.stats.height, 1);
         }
       } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
     })
-    .catch(err => { Bisq.LOG_RESTAPI_ERR(err) });
+      .catch(err => { Bisq.LOG_RESTAPI_ERR(err) });
   }
 
-  private async $lookupBsqTx(txId: string) : Promise<BisqTransaction | undefined> {
-    const customPromise = this.makeApiCall('transactions/get-bsq-tx', [txId]);
+  private async $lookupBsqTx(txId: string): Promise<BisqTransaction | undefined> {
+    const apiPromise = this.makeApiCall('transactions/get-bsq-tx', [txId]);
     try {
-      let buffer = await customPromise;
+      let buffer = await apiPromise;
       const tx: BisqTransaction = JSON.parse(buffer)
       return tx;
     } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
     return undefined;
   }
 
-  private async $lookupBsqTx2(start: number, limit: number, types: string) : Promise<BisqTransaction[]> {
-    const customPromise = this.makeApiCall('transactions/query-txs-paginated', [String(start), String(limit), types]);
+  private async $lookupBsqTxs(start: number, limit: number, types: string[]): Promise<BisqTransaction[]> {
+    var joinedTypes = types.join("~")
+    if (joinedTypes.length === 0) {
+      joinedTypes = "~";
+    }
+
+    const apiPromise = this.makeApiCall('transactions/query-txs-paginated', [String(start), String(limit), joinedTypes]);
     try {
-      let buffer = await customPromise;
+      let buffer = await apiPromise;
       const txs: BisqTransaction[] = JSON.parse(buffer)
       return txs;
     } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
     return [];
   }
 
-  private async $lookupBsqTxForAddr(addr: string) : Promise<BisqTransaction[]> {
-    const customPromise = this.makeApiCall('transactions/get-bsq-tx-for-addr', [addr]);
+  private async $lookupBsqTxForAddr(addr: string): Promise<BisqTransaction[]> {
+    const apiPromise = this.makeApiCall('transactions/get-bsq-tx-for-addr', [addr]);
     try {
-      let buffer = await customPromise;
+      let buffer = await apiPromise;
       const txs: BisqTransaction[] = JSON.parse(buffer)
       return txs;
     } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
     return [];
   }
 
-  private async $lookupBsqBlockByHeight(height: number) : Promise<BisqBlock> {
-    const customPromise = this.makeApiCall('blocks/get-bsq-block-by-height', [String(height)]);
+  private async $lookupBsqBlockByHeight(height: number): Promise<BisqBlock> {
+    const apiPromise = this.makeApiCall('blocks/get-bsq-block-by-height', [String(height)]);
     try {
-      let buffer = await customPromise;
+      let buffer = await apiPromise;
       const block: BisqBlock = JSON.parse(buffer)
       return block;
     } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
     return {} as BisqBlock;
   }
 
-  private async $lookupBsqBlockByHash(hash: string) : Promise<BisqBlock | undefined> {
-    const customPromise = this.makeApiCall('blocks/get-bsq-block-by-hash', [hash]);
+  private async $lookupBsqBlockByHash(hash: string): Promise<BisqBlock | undefined> {
+    const apiPromise = this.makeApiCall('blocks/get-bsq-block-by-hash', [hash]);
     try {
-      let buffer = await customPromise;
+      let buffer = await apiPromise;
       const block: BisqBlock = JSON.parse(buffer)
       this.allBlocks.push(block);
-      this.allBlocks = this.allBlocks.sort((a,b) => {
+      this.allBlocks = this.allBlocks.sort((a, b) => {
         return b['height'] >= a['height'] ? 1 : -1;
       });
       this.blocks = this.allBlocks;
@@ -263,36 +280,36 @@ class Bisq {
   }
 
   private getCurrencies() {
-    const customPromise = this.makeApiCall('markets/get-currencies');
-    customPromise.then((buffer) => {
+    const apiPromise = this.makeApiCall('markets/get-currencies');
+    apiPromise.then((buffer) => {
       try {
         bisqMarket.setCurrencyData(JSON.parse(buffer));
       } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
     })
-    .catch(err => { Bisq.LOG_RESTAPI_ERR(err) });
-    return customPromise;
+      .catch(err => { Bisq.LOG_RESTAPI_ERR(err) });
+    return apiPromise;
   }
 
   private getOffers() {
-    const customPromise = this.makeApiCall('markets/get-offers');
-    customPromise.then((buffer) => {
+    const apiPromise = this.makeApiCall('markets/get-offers');
+    apiPromise.then((buffer) => {
       try {
         bisqMarket.setOffersData(JSON.parse(buffer));
       } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
     })
-    .catch(err => { Bisq.LOG_RESTAPI_ERR(err) });
-    return customPromise;
+      .catch(err => { Bisq.LOG_RESTAPI_ERR(err) });
+    return apiPromise;
   }
 
   private getTrades() {
-    const customPromise = this.makeApiCall('markets/get-trades', [String(bisqMarket.getNewestTradeDate()), String(bisqMarket.getOldestTradeDate()-1)]);
-    customPromise.then((buffer) => {
+    const apiPromise = this.makeApiCall('markets/get-trades', [String(bisqMarket.getNewestTradeDate()), String(bisqMarket.getOldestTradeDate() - 1)]);
+    apiPromise.then((buffer) => {
       try {
         bisqMarket.setTradesData(JSON.parse(buffer));
       } catch (e) { Bisq.LOG_RESTAPI_DATA_ERR(e); }
     })
-    .catch(err => { Bisq.LOG_RESTAPI_ERR(err) });
-    return customPromise;
+      .catch(err => { Bisq.LOG_RESTAPI_ERR(err) });
+    return apiPromise;
   }
 
   // requesting information from Bisq REST API process
@@ -308,8 +325,8 @@ class Bisq {
       method: 'GET',
       path: pathStr,
       headers: {
-      'Host': config.BISQ.HOST,
-      'Content-Length': 0 //optPostRequest.length
+        'Host': config.BISQ.HOST,
+        'Content-Length': 0 //optPostRequest.length
       },
       agent: false,
       rejectUnauthorized: false
@@ -317,13 +334,13 @@ class Bisq {
     var request = http.request(requestOptions);
     //request.write(optPostRequest);
     request.end();
-    var customPromise = new Promise<string>((resolve, reject) => {
-      request.on('error', function(e) {
+    var apiPromise = new Promise<string>((resolve, reject) => {
+      request.on('error', function (e: any) {
         reject(new Error(`unable to make http request. ${JSON.stringify(requestOptions)}`));
       });
-      request.on('response', (response) =>  {
+      request.on('response', (response: any) => {
         var buffer = ''
-        response.on('data', function (chunk) {
+        response.on('data', function (chunk: any) {
           buffer = buffer + chunk
         })
         response.on('end', () => {
@@ -331,23 +348,23 @@ class Bisq {
         });
       });
     });
-    return customPromise;
+    return apiPromise;
   }
 
   private static LOG_RESTAPI_ERR(err) {
-    logger.err(`it appears the Bisq daemon is not responding:\n${err}`);
+    logger.err(`the Bisq daemon is not responding:\n${err}`);
   }
 
   private static LOG_RESTAPI_DATA_ERR(err) {
     logger.err(`{err}`);
   }
 
-  private static FORMAT_BITCOIN(nbr) : string {
-    return nbr.toLocaleString('en-us', {maximumFractionDigits:8});
+  private static FORMAT_BITCOIN(nbr): string {
+    return nbr.toLocaleString('en-us', { maximumFractionDigits: 8 });
   }
 
-  private static FORMAT_USD(nbr) : string {
-    return nbr.toLocaleString('en-us', {maximumFractionDigits:2});
+  private static FORMAT_USD(nbr): string {
+    return nbr.toLocaleString('en-us', { maximumFractionDigits: 2 });
   }
 }
 

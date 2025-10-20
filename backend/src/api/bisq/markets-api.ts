@@ -1,5 +1,7 @@
-import { Currencies, OffersData, TradesData, Depth, Currency, Interval, HighLowOpenClose,
-  Markets, Offers, Offer, BisqTrade, MarketVolume, Tickers, Ticker, SummarizedIntervals, SummarizedInterval } from './interfaces';
+import {
+  Currencies, OffersData, TradesData, Depth, Currency, Interval, HighLowOpenClose,
+  Markets, Offers, Offer, BisqTrade, MarketVolume, Tickers, Ticker, SummarizedIntervals, SummarizedInterval
+} from './interfaces';
 import { Common } from '../common';
 import logger from '../../logger';
 
@@ -31,7 +33,7 @@ class BisqMarketsApi {
   }
 
   setTradesData(trades: TradesData[]) {
-    const ageForDiscardingStats = 1000*60*60*24*365*2;
+    const ageForDiscardingStats = 1000 * 60 * 60 * 24 * 365 * 2;
     var tradesPre = this.tradesData.length;
     trades.forEach((trade) => {
       // ignore very old trade stats (performance reasons)
@@ -44,7 +46,7 @@ class BisqMarketsApi {
         this.tradesData.push(trade);
       }
     });
-    this.tradesData = this.tradesData.sort(function(b, a) {
+    this.tradesData = this.tradesData.sort(function (b, a) {
       return (a.tradeDate < b.tradeDate) ? -1 : (a.tradeDate > b.tradeDate) ? 1 : 0;
     });
     logger.info(`Updated Bisq Market Trades Data, #${tradesPre} -> ${this.tradesData.length} records.  Newest: ${this.getNewestTradeDate()}`);
@@ -52,11 +54,11 @@ class BisqMarketsApi {
   }
 
   setCurrencyData(currencies: Currency[]) {
-    currencies.push( {'code': "BTC",'name': "Bitcoin", 'precision': 8, '_type': "crypto"} );
-    this.cryptoCurrencyData = currencies.filter( (x) => x._type === "crypto" );
-    this.fiatCurrencyData = currencies.filter( (x) => x._type === "fiat" );
-    this.activeCryptoCurrencyData = currencies.filter( (x) => x._type === "crypto" );
-    this.activeFiatCurrencyData = currencies.filter( (x) => x._type === "fiat" );
+    currencies.push({ 'code': "BTC", 'name': "Bitcoin", 'precision': 8, '_type': "crypto" });
+    this.cryptoCurrencyData = currencies.filter((x) => x._type === "crypto");
+    this.fiatCurrencyData = currencies.filter((x) => x._type === "fiat");
+    this.activeCryptoCurrencyData = currencies.filter((x) => x._type === "crypto");
+    this.activeFiatCurrencyData = currencies.filter((x) => x._type === "fiat");
     this.fiatCurrenciesIndexed = {};
     this.allCurrenciesIndexed = {};
 
@@ -68,8 +70,8 @@ class BisqMarketsApi {
       this.allCurrenciesIndexed[currency.code] = currency;
     });
     this.cryptoCurrencyData.forEach((currency) => {
-       currency._type = 'crypto';
-       this.allCurrenciesIndexed[currency.code] = currency;
+      currency._type = 'crypto';
+      this.allCurrenciesIndexed[currency.code] = currency;
     });
   }
 
@@ -147,7 +149,7 @@ class BisqMarketsApi {
     direction?: 'buy' | 'sell',
   ): Offers {
     const currencyPair = market.replace('_', '/').toUpperCase();
-    logger.warn(`getOffers: ${currencyPair}`);
+    logger.debug(`getOffers: ${currencyPair}`);
     let buys: Offer[] | null = null;
     let sells: Offer[] | null = null;
 
@@ -174,7 +176,6 @@ class BisqMarketsApi {
   }
 
   getMarkets(): Markets {
-    var counter = 0;
     const allCurrencies = this.getCurrencies();
 
     const activeCurrencies = this.getCurrencies('active');
@@ -184,6 +185,7 @@ class BisqMarketsApi {
       if (allCurrencies[currency].code === 'BTC') {
         continue;
       }
+      
       const isFiat = allCurrencies[currency]._type === 'fiat';
       const pmarketname = allCurrencies['BTC']['name'];
 
@@ -209,7 +211,6 @@ class BisqMarketsApi {
         'rtype': rtype,
         'name': lname + '/' + rname,
       };
-      counter++;
     }
     logger.debug(`getMarkets returning ${Object.keys(markets).length} items`);
     return markets;
@@ -376,8 +377,8 @@ class BisqMarketsApi {
       var lastTradePrice = this.intToBtc(0);
       const lastTrade = this.tradeDataByMarket[market];
       if (lastTrade) {
-         lastTradePrice = this.intToBtc(
-            lastTrade[0].primaryMarketTradePrice * Math.pow(10, 8 - currencyRight.precision));
+        lastTradePrice = this.intToBtc(
+          lastTrade[0].primaryMarketTradePrice * Math.pow(10, 8 - currencyRight.precision));
       }
       ticker = {
         'last': (isNaN(livePrice) ? lastTradePrice : '' + livePrice),
@@ -397,15 +398,15 @@ class BisqMarketsApi {
     const offersData = this.offersData.slice().sort((a, b) => a.price - b.price);
 
     const buy = offersData.find((offer) => offer.currencyPair === currencyPair
-                                          && offer.primaryMarketDirection === 'BUY'
-                                          && offer.date >= timestampFromMilli
-                                          && offer.date <= timestampToMilli
-                                        );
+      && offer.primaryMarketDirection === 'BUY'
+      && offer.date >= timestampFromMilli
+      && offer.date <= timestampToMilli
+    );
     const sell = offersData.find((offer) => offer.currencyPair === currencyPair
-                                            && offer.primaryMarketDirection === 'SELL'
-                                            && offer.date >= timestampFromMilli
-                                            && offer.date <= timestampToMilli
-                                          );
+      && offer.primaryMarketDirection === 'SELL'
+      && offer.date >= timestampFromMilli
+      && offer.date <= timestampToMilli
+    );
 
     if (buy) {
       ticker.buy = this.intToBtc(buy.primaryMarketPrice * Math.pow(10, 8 - currencyRight.precision));
@@ -574,7 +575,7 @@ class BisqMarketsApi {
     const tradesDataSorted = this.tradesData.slice();
     let ts = tradesDataSorted.at(-1);
     if (ts) {
-        return ts.tradeDate;
+      return ts.tradeDate;
     }
     return 0;
   }
@@ -583,7 +584,7 @@ class BisqMarketsApi {
     const tradesDataSorted = this.tradesData.slice();
     let ts = tradesDataSorted.at(0);
     if (ts) {
-        return ts.tradeDate;
+      return ts.tradeDate;
     }
     return 0;
   }
@@ -598,7 +599,7 @@ class BisqMarketsApi {
     sort: string,
     limit: number,
     integerAmounts: boolean = true,
- ): TradesData[] {
+  ): TradesData[] {
     let trade_id_from_ts: number | null = null;
     let trade_id_to_ts: number | null = null;
     const allCurrencies = this.getCurrencies();
@@ -712,9 +713,9 @@ class BisqMarketsApi {
     const currencyPairs = market.split('_');
     const currencyRight = this.allCurrenciesIndexed[currencyPairs[1].toUpperCase()];
     const currencyLeft = this.allCurrenciesIndexed[currencyPairs[0].toUpperCase()];
-    const price = offer['primaryMarketPrice'] * Math.pow( 10, 8 - currencyRight['precision']);
-    const amount = offer['primaryMarketAmount'] * Math.pow( 10, 8 - currencyLeft['precision']);
-    const volume = offer['primaryMarketVolume'] * Math.pow( 10, 8 - currencyRight['precision']);
+    const price = offer['primaryMarketPrice'] * Math.pow(10, 8 - currencyRight['precision']);
+    const amount = offer['primaryMarketAmount'] * Math.pow(10, 8 - currencyLeft['precision']);
+    const volume = offer['primaryMarketVolume'] * Math.pow(10, 8 - currencyRight['precision']);
 
     return {
       offer_id: offer.id,

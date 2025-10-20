@@ -100,7 +100,8 @@
   },
   "BISQ": {
     "ENABLED": false,
-    "DATA_PATH": "/bisq/statsnode-data/btc_mainnet/db"
+    "HOST": "127.0.0.1",
+    "PORT": 8081
   },
   "LIGHTNING": {
     "ENABLED": false,
